@@ -132,10 +132,12 @@ data class ModelIdentityInfo(
 
 enum class AccountStatus(val displayName: String) {
     UNCHECKED("待检测"),
-    CHECKING("检测中..."),
-    VALID("有效 (正常)"),
-    INVALID("异常/凭据失效"),
-    RATE_LIMITED("已被限流/繁忙")
+    CHECKING("探测检测中..."),
+    VALID("正常有效"),
+    BANNED("已在Arena被禁用/封禁"),
+    INVALID("密码或凭据错误"),
+    RATE_LIMITED("已被Arena限流(429)"),
+    CAPTCHA_REQUIRED("需网页通过人机验证")
 }
 
 enum class ModelTier(
@@ -213,10 +215,12 @@ data class ManagedAccountEntity(
     val password: String,
     val label: String,
     val isActive: Boolean = false,
-    val status: String = "UNCHECKED", // UNCHECKED, CHECKING, VALID, INVALID, RATE_LIMITED
+    val status: String = "UNCHECKED", // UNCHECKED, CHECKING, VALID, BANNED, INVALID, RATE_LIMITED, CAPTCHA_REQUIRED
     val lastCheckedAt: Long = 0L,
     val failureReason: String = "",
     val notes: String = "",
+    val cookies: String = "",
+    val isBannedOnArena: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 

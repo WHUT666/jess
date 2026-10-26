@@ -23,6 +23,7 @@ import com.example.data.model.SequencingMode
 import com.example.data.model.SessionWithTurns
 import com.example.data.repository.ArenaRepository
 import com.example.engine.ArenaJsBridge
+import com.example.engine.ArenaLoginProbeResult
 import com.example.engine.ArenaModelProbeEngine
 import com.example.engine.BridgeEvent
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -107,6 +108,12 @@ class ArenaPilotViewModel(
 
     private val _isCheckingAccounts = MutableStateFlow(false)
     val isCheckingAccounts: StateFlow<Boolean> = _isCheckingAccounts.asStateFlow()
+
+    private val _activeProbeResult = MutableStateFlow<ArenaLoginProbeResult?>(null)
+    val activeProbeResult: StateFlow<ArenaLoginProbeResult?> = _activeProbeResult.asStateFlow()
+
+    private val _isProbingLogin = MutableStateFlow(false)
+    val isProbingLogin: StateFlow<Boolean> = _isProbingLogin.asStateFlow()
 
     private val _extractionConfig = MutableStateFlow(ExtractionConfig())
     val extractionConfig: StateFlow<ExtractionConfig> = _extractionConfig.asStateFlow()
@@ -628,16 +635,55 @@ class ArenaPilotViewModel(
         }
     }
 
-    // === 账号有效性检测功能 ===
+    // === 账号 Arena 禁用检测与接口直连登录探测 ===
+
+    fun probeArenaLogin(account: ManagedAccountEntity) {
+        if (_isProbingLogin.value) return
+        viewModelScope.launch {
+            _isProbingLogin.value = true
+            _activeProbeResult.value = null
+            _toastMessages.tryEmit("🔍 正在探测 Arena 登录接口与禁用状态: ${account.label}...")
+            val result = repository.probeDirectLogin(account)
+            _activeProbeResult.value = result
+            _isProbingLogin.value = false
+
+            when {
+                result.isBannedOnArena -> {
+                    _toastMessages.tryEmit("🚫 严重：${account.label} 在 Arena 中已被禁用/封禁！")
+                }
+                result.canDirectApiLogin -> {
+                    _toastMessages.tryEmit("🎉 ${account.label} 接口直接账号密码登录成功！Session 已自动同步")
+                }
+                result.isCloudflareProtected -> {
+                    _toastMessages.tryEmit("🛡️ Arena 接口受 Cloudflare 人机防护拦截，已就绪一键填密网页直登")
+                }
+                result.isInvalidCredentials -> {
+                    _toastMessages.tryEmit("❌ 凭证校验失败：${account.label} 密码错误或未在 Arena 注册")
+                }
+                result.status == AccountStatus.VALID -> {
+                    _toastMessages.tryEmit("✅ ${account.label} Arena 验证正常，未被禁用")
+                }
+                else -> {
+                    _toastMessages.tryEmit("探测完成: ${result.statusSummary}")
+                }
+            }
+        }
+    }
+
+    fun dismissProbeResult() {
+        _activeProbeResult.value = null
+    }
 
     fun verifySingleAccount(account: ManagedAccountEntity) {
         viewModelScope.launch {
-            _toastMessages.tryEmit("正在检测账号有效性: ${account.label}...")
+            _toastMessages.tryEmit("正在检测账号是否在 Arena 中被禁用: ${account.label}...")
             val result = repository.checkAccountValidity(account)
             when (result) {
-                AccountStatus.VALID -> _toastMessages.tryEmit("✅ 账号验证通过: ${account.label}")
-                AccountStatus.INVALID -> _toastMessages.tryEmit("❌ 账号凭据异常: ${account.label}")
-                AccountStatus.RATE_LIMITED -> _toastMessages.tryEmit("⚠️ 账号受到网关限流: ${account.label}")
+                AccountStatus.VALID -> _toastMessages.tryEmit("✅ Arena 检测正常：${account.label} 未被禁用")
+                AccountStatus.BANNED -> _toastMessages.tryEmit("🚫 严重警告：${account.label} 在 Arena 中已被禁用/封禁！")
+                AccountStatus.INVALID -> _toastMessages.tryEmit("❌ 凭证异常：${account.label} 密码错误或未注册")
+                AccountStatus.RATE_LIMITED -> _toastMessages.tryEmit("⚠️ 账号受到 Arena 限流 (429): ${account.label}")
+                AccountStatus.CAPTCHA_REQUIRED -> _toastMessages.tryEmit("🛡️ 触发 Arena 人机验证防护: ${account.label}")
                 else -> {}
             }
         }
@@ -647,16 +693,24 @@ class ArenaPilotViewModel(
         if (_isCheckingAccounts.value) return
         viewModelScope.launch {
             _isCheckingAccounts.value = true
-            _toastMessages.tryEmit("开始并行全量检测所有账号有效性...")
+            _toastMessages.tryEmit("开始全量检测所有账号在 Arena 中的禁用状态与有效性...")
             val list = repository.getAllAccountsList()
             var validCount = 0
-            var invalidCount = 0
+            var bannedCount = 0
+            var otherCount = 0
             list.forEach { acc ->
                 val res = repository.checkAccountValidity(acc)
-                if (res == AccountStatus.VALID) validCount++ else invalidCount++
+                when (res) {
+                    AccountStatus.VALID -> validCount++
+                    AccountStatus.BANNED -> bannedCount++
+                    else -> otherCount++
+                }
             }
             _isCheckingAccounts.value = false
-            _toastMessages.tryEmit("全量检测完成: $validCount 个正常有效，${if (invalidCount > 0) "$invalidCount 个异常" else "全部通过"}")
+            val report = StringBuilder("Arena 检测完成: $validCount 个正常未禁用")
+            if (bannedCount > 0) report.append("，❗$bannedCount 个已被官方禁用")
+            if (otherCount > 0) report.append("，⚠️ $otherCount 个需核对凭证/人机验证")
+            _toastMessages.tryEmit(report.toString())
         }
     }
 

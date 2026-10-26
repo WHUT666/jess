@@ -45,6 +45,9 @@ interface AccountDao {
     @Query("UPDATE managed_accounts SET status = :status, lastCheckedAt = :checkedAt, failureReason = :reason WHERE id = :id")
     suspend fun updateAccountStatus(id: Long, status: String, checkedAt: Long, reason: String)
 
+    @Query("UPDATE managed_accounts SET status = :status, lastCheckedAt = :checkedAt, failureReason = :reason, isBannedOnArena = :isBanned, cookies = CASE WHEN :cookies != '' THEN :cookies ELSE cookies END WHERE id = :id")
+    suspend fun updateAccountCheckResult(id: Long, status: String, checkedAt: Long, reason: String, isBanned: Boolean, cookies: String)
+
     @Query("UPDATE managed_accounts SET isActive = CASE WHEN id = :selectedId THEN 1 ELSE 0 END")
     suspend fun setActiveAccount(selectedId: Long)
 }

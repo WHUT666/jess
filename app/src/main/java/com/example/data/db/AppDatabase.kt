@@ -23,7 +23,7 @@ import com.example.data.model.ManagedAccountEntity
         ConversationTurnEntity::class,
         ManagedAccountEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
