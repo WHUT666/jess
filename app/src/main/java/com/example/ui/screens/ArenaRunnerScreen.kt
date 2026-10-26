@@ -20,11 +20,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -96,7 +100,7 @@ import com.example.ui.theme.StatusSky
 import com.example.viewmodel.ArenaPilotViewModel
 import com.example.viewmodel.AutomationStatus
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun ArenaRunnerScreen(
@@ -285,11 +289,15 @@ fun ArenaRunnerScreen(
         }
 
         // Floating Bottom HUD Area - Designed to NOT obstruct Arena's grid or login buttons
+        val isImeVisible = WindowInsets.isImeVisible
+        val effectiveCollapsed = isHudCollapsed || isImeVisible
+
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp)
+                .imePadding()
+                .padding(horizontal = 10.dp, vertical = if (isImeVisible) 4.dp else 8.dp)
         ) {
             // Countdown Notification Card (if triggered)
             AnimatedVisibility(
@@ -371,8 +379,8 @@ fun ArenaRunnerScreen(
                 }
             }
 
-            // Collapsible Floating Control Pill / Expanded Panel
-            if (isHudCollapsed) {
+            // Collapsible Floating Control Pill / Expanded Panel (Auto-collapses when typing)
+            if (effectiveCollapsed) {
                 // MINIMAL NON-BLOCKING FLOATING PILL (Only ~40dp tall, leaves 100% of grid clickable)
                 Surface(
                     modifier = Modifier
