@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Center duel shield / arena hexagon -->
+    <path
+        android:pathData="M54,28 L74,38 L74,62 L54,78 L34,62 L34,38 Z"
+        android:strokeWidth="2.5"
+        android:strokeColor="#38BDF8"
+        android:fillColor="#151D36" />
+
+    <!-- Pulse nodes for Model A and Model B -->
+    <path
+        android:pathData="M38,44 L44,44 L44,50 L38,50 Z"
+        android:fillColor="#60A5FA" />
+    <path
+        android:pathData="M64,44 L70,44 L70,50 L64,50 Z"
+        android:fillColor="#F472B6" />
+
+    <!-- Auto-prompt play / forward continuous flow triangle -->
+    <path
+        android:pathData="M48,46 L62,54 L48,62 Z"
+        android:fillColor="#38BDF8" />
+
+    <!-- Automation loop arc -->
+    <path
+        android:pathData="M54,22 C68,22 80,33 80,47"
+        android:strokeWidth="2"
+        android:strokeColor="#A855F7"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M78,42 L80,48 L86,46"
+        android:strokeWidth="2"
+        android:strokeColor="#A855F7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M54,84 C40,84 28,73 28,59"
+        android:strokeWidth="2"
+        android:strokeColor="#38BDF8"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M30,64 L28,58 L22,60"
+        android:strokeWidth="2"
+        android:strokeColor="#38BDF8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

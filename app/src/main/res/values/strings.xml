@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">ArenaPilot</string>
+    <string name="nav_live_runner">对战监控</string>
+    <string name="nav_conversations">对话管理</string>
+    <string name="nav_prompts">提示词库</string>
+    <string name="nav_rules">自动化规则</string>
+    <string name="nav_history">会话日志</string>
+    <string name="status_idle">待命中</string>
+    <string name="status_streaming">正在生成回复...</string>
+    <string name="status_stopped">检测到回复结束</string>
+    <string name="status_cooldown">停顿就绪，即将触发引导...</string>
+    <string name="status_sending">正在自动注入引导词...</string>
+    <string name="status_paused">自动引导已暂停</string>
+    <string name="accessibility_service_description">实时辅助监控外部浏览器中的 arena.ai 对战对话并在停顿时提示自动引导</string>
+</resources>

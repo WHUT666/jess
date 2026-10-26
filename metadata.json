@@ -1,0 +1,8 @@
+{
+  "name": "ArenaPilot",
+  "description": "实时监控 arena.ai 对战对话流，检测回复停顿时自动发送预设提示词引导深入探讨的自动化伴侣",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
