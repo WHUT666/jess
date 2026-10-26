@@ -39,6 +39,12 @@ interface AccountDao {
     @Delete
     suspend fun delete(account: ManagedAccountEntity)
 
+    @Query("SELECT * FROM managed_accounts ORDER BY id ASC")
+    suspend fun getAllAccountsList(): List<ManagedAccountEntity>
+
+    @Query("UPDATE managed_accounts SET status = :status, lastCheckedAt = :checkedAt, failureReason = :reason WHERE id = :id")
+    suspend fun updateAccountStatus(id: Long, status: String, checkedAt: Long, reason: String)
+
     @Query("UPDATE managed_accounts SET isActive = CASE WHEN id = :selectedId THEN 1 ELSE 0 END")
     suspend fun setActiveAccount(selectedId: Long)
 }

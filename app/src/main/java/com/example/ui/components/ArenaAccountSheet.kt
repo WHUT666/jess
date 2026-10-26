@@ -32,8 +32,12 @@ import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -70,6 +74,8 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.ManagedAccountEntity
 import com.example.ui.theme.StatusAmber
 import com.example.ui.theme.StatusEmerald
+import com.example.ui.theme.StatusRose
+import com.example.ui.theme.StatusSky
 import com.example.viewmodel.ArenaPilotViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,6 +88,7 @@ fun ArenaAccountSheet(
     val context = LocalContext.current
     val accountInfo by viewModel.accountInfo.collectAsState()
     val rules by viewModel.rules.collectAsState()
+    val isCheckingAccounts by viewModel.isCheckingAccounts.collectAsState()
     val managedAccounts by viewModel.allManagedAccounts.collectAsState(initial = emptyList())
 
     var showAddAccountDialog by remember { mutableStateOf(false) }
@@ -115,7 +122,7 @@ fun ArenaAccountSheet(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(46.dp)
+                        .size(44.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
@@ -124,11 +131,11 @@ fun ArenaAccountSheet(
                         imageVector = Icons.Default.AccountCircle,
                         contentDescription = "Arena Account",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -137,21 +144,35 @@ fun ArenaAccountSheet(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "支持直接账户密码登录、一键填密与免密切换",
+                        text = "支持直接账户密码登录、有效性检测与免密切换",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
-                FilledTonalButton(
-                    onClick = { showAddAccountDialog = true },
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    modifier = Modifier.testTag("add_account_btn")
-                ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("添加", fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FilledTonalButton(
+                        onClick = { viewModel.verifyAllAccounts() },
+                        enabled = !isCheckingAccounts,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 3.dp),
+                        modifier = Modifier.testTag("verify_all_accounts_btn")
+                    ) {
+                        Icon(imageVector = Icons.Default.HourglassTop, contentDescription = null, modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(if (isCheckingAccounts) "检测中" else "全量检测", fontSize = 11.sp)
+                    }
+
+                    FilledTonalButton(
+                        onClick = { showAddAccountDialog = true },
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 3.dp),
+                        modifier = Modifier.testTag("add_account_btn")
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text("添加", fontSize = 11.sp)
+                    }
                 }
             }
 
@@ -240,17 +261,22 @@ fun ArenaAccountSheet(
                         border = if (acc.isActive) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
-                            // Top Row: Label, Active Badge, Delete
+                            // Top Row: Label, Active Badge, Validity Badge, Delete
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
                                     Text(
                                         text = acc.label,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
+                                        fontSize = 13.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     if (acc.isActive) {
@@ -259,14 +285,36 @@ fun ArenaAccountSheet(
                                             color = StatusEmerald.copy(alpha = 0.2f)
                                         ) {
                                             Row(
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = StatusEmerald, modifier = Modifier.size(11.dp))
-                                                Spacer(modifier = Modifier.width(3.dp))
-                                                Text("当前活跃", fontSize = 10.sp, color = StatusEmerald, fontWeight = FontWeight.Bold)
+                                                Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = StatusEmerald, modifier = Modifier.size(10.dp))
+                                                Spacer(modifier = Modifier.width(2.dp))
+                                                Text("活跃", fontSize = 9.sp, color = StatusEmerald, fontWeight = FontWeight.Bold)
                                             }
                                         }
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    }
+
+                                    // Status Badge
+                                    val (stColor, stText) = when (acc.status) {
+                                        "VALID" -> Pair(StatusEmerald, "有效")
+                                        "INVALID" -> Pair(StatusRose, "异常")
+                                        "RATE_LIMITED" -> Pair(StatusAmber, "限流")
+                                        "CHECKING" -> Pair(StatusSky, "检测中")
+                                        else -> Pair(MaterialTheme.colorScheme.onSurfaceVariant, "未检测")
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = stColor.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = stText,
+                                            fontSize = 9.sp,
+                                            color = stColor,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                        )
                                     }
                                 }
 
@@ -345,13 +393,37 @@ fun ArenaAccountSheet(
                                 }
                             }
 
+                            if (acc.failureReason.isNotBlank() || acc.lastCheckedAt > 0L) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = if (acc.failureReason.isNotBlank()) "详情: ${acc.failureReason}" else "上次检测正常",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // One-tap Action Buttons
+                            // One-tap Action Buttons (Check, Autofill, Clean Switch)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
+                                FilledTonalButton(
+                                    onClick = { viewModel.verifySingleAccount(acc) },
+                                    modifier = Modifier
+                                        .height(34.dp)
+                                        .testTag("verify_account_${acc.id}"),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.HourglassTop, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text("检测", fontSize = 11.sp)
+                                }
+
                                 Button(
                                     onClick = {
                                         viewModel.switchAccount(acc, clearCookies = false)
@@ -364,11 +436,11 @@ fun ArenaAccountSheet(
                                         .testTag("fill_login_account_${acc.id}"),
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                     shape = RoundedCornerShape(8.dp),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
-                                    Icon(imageVector = Icons.Default.Login, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("一键填密登录", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Icon(imageVector = Icons.Default.Login, contentDescription = null, modifier = Modifier.size(13.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("一键填密", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
 
                                 OutlinedButton(
@@ -382,11 +454,11 @@ fun ArenaAccountSheet(
                                         .height(34.dp)
                                         .testTag("switch_clean_account_${acc.id}"),
                                     shape = RoundedCornerShape(8.dp),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
-                                    Icon(imageVector = Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(13.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("清除缓存重登", fontSize = 11.sp)
+                                    Icon(imageVector = Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text("清除重登", fontSize = 11.sp)
                                 }
                             }
                         }

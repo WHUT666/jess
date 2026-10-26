@@ -361,7 +361,7 @@ object ArenaMonitorScript {
         var buttons = document.querySelectorAll('button, a[role="button"]');
         for (var i = 0; i < buttons.length; i++) {
             var txt = (buttons[i].innerText || '').toLowerCase();
-            if (txt.indexOf('clear') !== -1 || txt.indexOf('new battle') !== -1 || txt.indexOf('新对话') !== -1 || txt.indexOf('开启') !== -1) {
+            if (txt.indexOf('clear') !== -1 || txt.indexOf('new battle') !== -1 || txt.indexOf('新对话') !== -1 || txt.indexOf('开启') !== -1 || txt.indexOf('new round') !== -1) {
                 buttons[i].click();
                 lastReportedModelA = '';
                 lastReportedModelB = '';
@@ -369,6 +369,51 @@ object ArenaMonitorScript {
             }
         }
         return false;
+    };
+
+    // 自动删除低级别模型并开启下一轮抽取
+    window.ArenaPilotBridge_clearAndDiscardLowTier = function() {
+        try {
+            var clicked = false;
+            var clearSelectors = [
+                'button#component-clear',
+                'button:contains("Clear")',
+                'button:contains("New Round")',
+                'button[aria-label*="Clear"]',
+                'button[aria-label*="清空"]',
+                'button[aria-label*="新回合"]'
+            ];
+            for (var k = 0; k < clearSelectors.length; k++) {
+                var btn = document.querySelector(clearSelectors[k]);
+                if (btn) {
+                    btn.click();
+                    clicked = true;
+                    break;
+                }
+            }
+            if (!clicked) {
+                var buttons = document.querySelectorAll('button');
+                for (var i = 0; i < buttons.length; i++) {
+                    var b = buttons[i];
+                    var txt = (b.innerText || '').trim().toLowerCase();
+                    if (txt === 'clear' || txt === '清空' || txt === 'new round' || txt === '新对战' || txt === 'restart') {
+                        b.click();
+                        clicked = true;
+                        break;
+                    }
+                }
+            }
+            lastReportedModelA = '';
+            lastReportedModelB = '';
+            return clicked;
+        } catch (_e) {
+            return false;
+        }
+    };
+
+    window.ArenaPilotBridge_isInputReady = function() {
+        var input = findInputField();
+        return !!(input && !input.disabled);
     };
 
     // 智能自动填密登录：支持 Microsoft Outlook 登录表单、Arena 原生登录、通用 OAuth

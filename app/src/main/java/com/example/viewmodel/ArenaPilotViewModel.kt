@@ -8,15 +8,22 @@ import android.os.VibratorManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.data.model.AccountStatus
 import com.example.data.model.ArenaAccountInfo
 import com.example.data.model.AutomationRule
 import com.example.data.model.ConversationSessionEntity
+import com.example.data.model.ExtractionConfig
+import com.example.data.model.ExtractionState
+import com.example.data.model.ExtractionStateStatus
+import com.example.data.model.ManagedAccountEntity
 import com.example.data.model.ModelIdentityInfo
+import com.example.data.model.ModelTier
 import com.example.data.model.PromptEntity
 import com.example.data.model.SequencingMode
 import com.example.data.model.SessionWithTurns
 import com.example.data.repository.ArenaRepository
 import com.example.engine.ArenaJsBridge
+import com.example.engine.ArenaModelProbeEngine
 import com.example.engine.BridgeEvent
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -98,6 +105,15 @@ class ArenaPilotViewModel(
     private val _detectedModelB = MutableStateFlow(ModelIdentityInfo(rawName = "Model B (盲测中)"))
     val detectedModelB: StateFlow<ModelIdentityInfo> = _detectedModelB.asStateFlow()
 
+    private val _isCheckingAccounts = MutableStateFlow(false)
+    val isCheckingAccounts: StateFlow<Boolean> = _isCheckingAccounts.asStateFlow()
+
+    private val _extractionConfig = MutableStateFlow(ExtractionConfig())
+    val extractionConfig: StateFlow<ExtractionConfig> = _extractionConfig.asStateFlow()
+
+    private val _extractionState = MutableStateFlow(ExtractionState())
+    val extractionState: StateFlow<ExtractionState> = _extractionState.asStateFlow()
+
     fun getSessionWithTurnsFlow(sessionId: Long) = repository.getSessionWithTurnsFlow(sessionId)
 
     private val _toastMessages = MutableSharedFlow<String>(extraBufferCapacity = 16)
@@ -106,6 +122,7 @@ class ArenaPilotViewModel(
     var jsEvaluator: ((String) -> Unit)? = null
 
     private var countdownJob: Job? = null
+    private var extractionJob: Job? = null
     private var streamStartTime: Long = 0
 
     init {
@@ -609,6 +626,188 @@ class ArenaPilotViewModel(
             repository.clearSessionLogs()
             _toastMessages.tryEmit("历史记录已清空")
         }
+    }
+
+    // === 账号有效性检测功能 ===
+
+    fun verifySingleAccount(account: ManagedAccountEntity) {
+        viewModelScope.launch {
+            _toastMessages.tryEmit("正在检测账号有效性: ${account.label}...")
+            val result = repository.checkAccountValidity(account)
+            when (result) {
+                AccountStatus.VALID -> _toastMessages.tryEmit("✅ 账号验证通过: ${account.label}")
+                AccountStatus.INVALID -> _toastMessages.tryEmit("❌ 账号凭据异常: ${account.label}")
+                AccountStatus.RATE_LIMITED -> _toastMessages.tryEmit("⚠️ 账号受到网关限流: ${account.label}")
+                else -> {}
+            }
+        }
+    }
+
+    fun verifyAllAccounts() {
+        if (_isCheckingAccounts.value) return
+        viewModelScope.launch {
+            _isCheckingAccounts.value = true
+            _toastMessages.tryEmit("开始并行全量检测所有账号有效性...")
+            val list = repository.getAllAccountsList()
+            var validCount = 0
+            var invalidCount = 0
+            list.forEach { acc ->
+                val res = repository.checkAccountValidity(acc)
+                if (res == AccountStatus.VALID) validCount++ else invalidCount++
+            }
+            _isCheckingAccounts.value = false
+            _toastMessages.tryEmit("全量检测完成: $validCount 个正常有效，${if (invalidCount > 0) "$invalidCount 个异常" else "全部通过"}")
+        }
+    }
+
+    // === 并行/自动化抽取高级模型功能 ===
+
+    fun updateExtractionConfig(config: ExtractionConfig) {
+        _extractionConfig.value = config
+    }
+
+    fun startHighTierExtraction(config: ExtractionConfig = _extractionConfig.value) {
+        if (_extractionState.value.status == ExtractionStateStatus.EXTRACTING) return
+        _extractionConfig.value = config
+        extractionJob?.cancel()
+
+        _extractionState.value = ExtractionState(
+            status = ExtractionStateStatus.EXTRACTING,
+            currentAttempt = 0,
+            discardedCount = 0,
+            logMessages = listOf("启动高级模型自动化抽取引擎...", "目标层级: ${config.targetTier.title}")
+        )
+        _toastMessages.tryEmit("🎰 已启动高级模型自动抽取！正在探测并自动剔除低阶模型...")
+
+        extractionJob = viewModelScope.launch {
+            var attempt = 0
+            while (attempt < config.maxAttempts && _extractionState.value.status == ExtractionStateStatus.EXTRACTING) {
+                attempt++
+                val (probeText, fp) = ArenaModelProbeEngine.generateFingerprintedProbe(
+                    basePrompt = config.probeBasePrompt,
+                    useRandomFingerprint = config.useRandomFingerprint
+                )
+
+                _extractionState.value = _extractionState.value.copy(
+                    currentAttempt = attempt,
+                    lastFingerprint = fp,
+                    logMessages = (_extractionState.value.logMessages + "第 $attempt 轮: 注入探针 (指纹: $fp)").takeLast(30)
+                )
+
+                // 1. 如果不是第1轮，先清除上一轮已丢弃的低阶模型并开启新对战
+                if (attempt > 1) {
+                    val clearScript = "if (window.ArenaPilotBridge_clearAndDiscardLowTier) { window.ArenaPilotBridge_clearAndDiscardLowTier(); }"
+                    jsEvaluator?.invoke(clearScript)
+                    delay(1200)
+                }
+
+                // 2. 注入探针提示词
+                val safePrompt = probeText.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
+                val injectScript = "if (window.ArenaPilotBridge_injectPrompt) { window.ArenaPilotBridge_injectPrompt('$safePrompt'); }"
+                jsEvaluator?.invoke(injectScript)
+
+                // 3. 等待生成并检测模型
+                var waitSeconds = 0
+                var foundHighTier = false
+                var detectedA: String = ""
+                var detectedB: String = ""
+                var tierA = ModelTier.UNKNOWN
+                var tierB = ModelTier.UNKNOWN
+
+                while (waitSeconds < 18 && _extractionState.value.status == ExtractionStateStatus.EXTRACTING) {
+                    delay(1000)
+                    waitSeconds++
+
+                    detectedA = _detectedModelA.value.rawName
+                    detectedB = _detectedModelB.value.rawName
+                    val snippetA = _telemetry.value.lastModelASnippet
+                    val snippetB = _telemetry.value.lastModelBSnippet
+
+                    tierA = ArenaModelProbeEngine.classifyTier(detectedA, snippetA)
+                    tierB = ArenaModelProbeEngine.classifyTier(detectedB, snippetB)
+
+                    if (ArenaModelProbeEngine.matchesTarget(tierA, config.targetTier) ||
+                        ArenaModelProbeEngine.matchesTarget(tierB, config.targetTier)) {
+                        foundHighTier = true
+                        break
+                    }
+
+                    // 如果检测到两者均为确凿的低阶模型 (Tier C)，不需要继续白白耗费时间等待输出，立即提前终止本轮并剔除
+                    if (tierA == ModelTier.TIER_C_LOW && tierB == ModelTier.TIER_C_LOW && waitSeconds >= 4) {
+                        break
+                    }
+                }
+
+                if (foundHighTier) {
+                    // 🎉 成功抽取到高级模型！
+                    val bestModel = if (ArenaModelProbeEngine.matchesTarget(tierA, config.targetTier)) detectedA else detectedB
+                    val bestTier = if (ArenaModelProbeEngine.matchesTarget(tierA, config.targetTier)) tierA else tierB
+
+                    _extractionState.value = _extractionState.value.copy(
+                        status = ExtractionStateStatus.HIGH_TIER_FOUND,
+                        foundModelAName = detectedA,
+                        foundModelBName = detectedB,
+                        foundModelTier = bestTier,
+                        logMessages = (_extractionState.value.logMessages + "🎉 成功捕获高阶模型: $bestModel (${bestTier.title})！已锁定并保留本会话！").takeLast(30)
+                    )
+
+                    // 震动提醒
+                    triggerSuccessHaptic()
+                    _toastMessages.tryEmit("🎉 恭喜！成功抽取到高阶模型: $bestModel！已为您锁定保留会话！")
+                    return@launch
+                } else {
+                    // 两者均为低阶或普通模型，自动执行剔除
+                    val discardMsg = "第 $attempt 轮: $detectedA vs $detectedB 判定为低阶/未达标模型，已自动执行 Clear/剔除"
+                    _extractionState.value = _extractionState.value.copy(
+                        discardedCount = _extractionState.value.discardedCount + 1,
+                        logMessages = (_extractionState.value.logMessages + discardMsg).takeLast(30)
+                    )
+
+                    // 自动清空并重置
+                    val clearScript = "if (window.ArenaPilotBridge_clearAndDiscardLowTier) { window.ArenaPilotBridge_clearAndDiscardLowTier(); }"
+                    jsEvaluator?.invoke(clearScript)
+
+                    delay((config.delayBetweenRoundsSeconds * 1000).toLong())
+                }
+            }
+
+            if (_extractionState.value.status == ExtractionStateStatus.EXTRACTING) {
+                _extractionState.value = _extractionState.value.copy(
+                    status = ExtractionStateStatus.MAX_ATTEMPTS_REACHED,
+                    logMessages = (_extractionState.value.logMessages + "已达到最大抽取次数 (${config.maxAttempts}次)，自动暂停抽取").takeLast(30)
+                )
+                _toastMessages.tryEmit("已达到设定的最大抽取轮次")
+            }
+        }
+    }
+
+    fun stopHighTierExtraction() {
+        extractionJob?.cancel()
+        _extractionState.value = _extractionState.value.copy(
+            status = ExtractionStateStatus.STOPPED,
+            logMessages = (_extractionState.value.logMessages + "用户手动停止抽取").takeLast(30)
+        )
+        _toastMessages.tryEmit("已停止高级模型自动抽取")
+    }
+
+    private fun triggerSuccessHaptic() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vibratorManager?.defaultVibrator?.vibrate(
+                    VibrationEffect.createWaveform(longArrayOf(0, 150, 80, 250, 100, 400), -1)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 150, 80, 250, 100, 400), -1))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator?.vibrate(500)
+                }
+            }
+        } catch (_: Exception) {}
     }
 }
 

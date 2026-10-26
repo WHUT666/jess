@@ -130,6 +130,81 @@ data class ModelIdentityInfo(
     }
 }
 
+enum class AccountStatus(val displayName: String) {
+    UNCHECKED("待检测"),
+    CHECKING("检测中..."),
+    VALID("有效 (正常)"),
+    INVALID("异常/凭据失效"),
+    RATE_LIMITED("已被限流/繁忙")
+}
+
+enum class ModelTier(
+    val code: String,
+    val title: String,
+    val description: String,
+    val isHighTier: Boolean
+) {
+    TIER_S_FLAGSHIP(
+        code = "TIER_S",
+        title = "Tier S 顶级旗舰",
+        description = "GPT-4o, o1, o3, Claude 3.5 Sonnet, DeepSeek R1/V3, Gemini 1.5/2.0 Pro",
+        isHighTier = true
+    ),
+    TIER_A_HIGH(
+        code = "TIER_A",
+        title = "Tier A 高性能",
+        description = "GPT-4o-mini, Claude 3 Haiku, Gemini Flash, Llama 3.3 70B",
+        isHighTier = true
+    ),
+    TIER_B_MID(
+        code = "TIER_B",
+        title = "Tier B 中阶通用",
+        description = "Qwen 32B, DeepSeek Lite, Mistral Medium",
+        isHighTier = false
+    ),
+    TIER_C_LOW(
+        code = "TIER_C",
+        title = "Tier C 低阶普通 (自动删除)",
+        description = "7B/8B 小模型、旧版微调模型及轻量开源模型",
+        isHighTier = false
+    ),
+    UNKNOWN(
+        code = "UNKNOWN",
+        title = "盲测分析中",
+        description = "正在通过探针指纹提取与特征流探测模型身份",
+        isHighTier = false
+    )
+}
+
+data class ExtractionConfig(
+    val probeBasePrompt: String = "请针对分布式系统中的 Paxos 与 Raft 算法，从状态机复制的第一性原理推导两者核心差异，并分析网络分区下脑裂防护的本质机制。",
+    val useRandomFingerprint: Boolean = true,
+    val targetTier: ModelTier = ModelTier.TIER_S_FLAGSHIP,
+    val autoDiscardLowTier: Boolean = true,
+    val maxAttempts: Int = 25,
+    val delayBetweenRoundsSeconds: Int = 3
+)
+
+enum class ExtractionStateStatus {
+    IDLE,
+    EXTRACTING,
+    DISCARDING_LOW_TIER,
+    HIGH_TIER_FOUND,
+    STOPPED,
+    MAX_ATTEMPTS_REACHED
+}
+
+data class ExtractionState(
+    val status: ExtractionStateStatus = ExtractionStateStatus.IDLE,
+    val currentAttempt: Int = 0,
+    val discardedCount: Int = 0,
+    val foundModelAName: String? = null,
+    val foundModelBName: String? = null,
+    val foundModelTier: ModelTier? = null,
+    val lastFingerprint: String = "",
+    val logMessages: List<String> = emptyList()
+)
+
 @Entity(tableName = "managed_accounts")
 data class ManagedAccountEntity(
     @PrimaryKey(autoGenerate = true)
@@ -138,6 +213,9 @@ data class ManagedAccountEntity(
     val password: String,
     val label: String,
     val isActive: Boolean = false,
+    val status: String = "UNCHECKED", // UNCHECKED, CHECKING, VALID, INVALID, RATE_LIMITED
+    val lastCheckedAt: Long = 0L,
+    val failureReason: String = "",
     val notes: String = "",
     val createdAt: Long = System.currentTimeMillis()
 )

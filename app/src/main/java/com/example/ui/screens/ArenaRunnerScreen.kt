@@ -81,8 +81,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Close
+import com.example.data.model.ExtractionStateStatus
 import com.example.data.model.PromptEntity
 import com.example.engine.ArenaMonitorScript
+import com.example.ui.components.ArenaExtractionSheet
 import com.example.ui.theme.ModelABlue
 import com.example.ui.theme.ModelBPink
 import com.example.ui.theme.StatusAmber
@@ -112,11 +116,13 @@ fun ArenaRunnerScreen(
     val modelA by viewModel.detectedModelA.collectAsState()
     val modelB by viewModel.detectedModelB.collectAsState()
     val activeAccount by viewModel.activeManagedAccount.collectAsState(initial = null)
+    val extractionState by viewModel.extractionState.collectAsState()
 
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var webProgress by remember { mutableStateOf(0) }
     var isLoadingWeb by remember { mutableStateOf(true) }
     var showQuickInjectSheet by remember { mutableStateOf(false) }
+    var showExtractionSheet by remember { mutableStateOf(false) }
 
     // HUD collapsed by default to avoid blocking arena web buttons and grid
     var isHudCollapsed by rememberSaveable { mutableStateOf(true) }
@@ -438,13 +444,13 @@ fun ArenaRunnerScreen(
                                     }
                                 },
                                 shape = RoundedCornerShape(14.dp),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 7.dp, vertical = 2.dp),
                                 modifier = Modifier
                                     .height(28.dp)
                                     .testTag("quick_fill_login_pill_btn")
                             ) {
                                 Icon(imageVector = Icons.Default.Key, contentDescription = null, modifier = Modifier.size(12.dp))
-                                Spacer(modifier = Modifier.width(3.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
                                 Text(
                                     text = if (activeAccount != null) "一键填密" else "选账号",
                                     fontSize = 10.sp,
@@ -452,18 +458,46 @@ fun ArenaRunnerScreen(
                                 )
                             }
 
+                            // High-Tier Model Extraction Quick Button
+                            val isExtracting = extractionState.status == ExtractionStateStatus.EXTRACTING
+                            val isFound = extractionState.status == ExtractionStateStatus.HIGH_TIER_FOUND
+                            FilledTonalButton(
+                                onClick = { showExtractionSheet = true },
+                                shape = RoundedCornerShape(14.dp),
+                                colors = if (isExtracting) ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                                         else if (isFound) ButtonDefaults.filledTonalButtonColors(containerColor = StatusEmerald.copy(alpha = 0.2f))
+                                         else ButtonDefaults.filledTonalButtonColors(),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 7.dp, vertical = 2.dp),
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .testTag("quick_extraction_pill_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Casino,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = if (isFound) StatusEmerald else if (isExtracting) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = if (isExtracting) "抽#${extractionState.currentAttempt}" else if (isFound) "🎉已捕获" else "抽高级模",
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isExtracting || isFound) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+
                             // Quick Battle Trigger
                             FilledTonalButton(
                                 onClick = { viewModel.startNewBattle() },
                                 shape = RoundedCornerShape(14.dp),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 7.dp, vertical = 2.dp),
                                 modifier = Modifier
                                     .height(28.dp)
                                     .testTag("quick_new_battle_pill_btn")
                             ) {
                                 Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(12.dp))
                                 Spacer(modifier = Modifier.width(2.dp))
-                                Text("开启对战", fontSize = 10.sp)
+                                Text("新对战", fontSize = 10.sp)
                             }
 
                             // Expand / Collapse Chevron Button
@@ -588,6 +622,70 @@ fun ArenaRunnerScreen(
                                 Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(11.dp))
                                 Spacer(modifier = Modifier.width(2.dp))
                                 Text("探针识模", fontSize = 9.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // High-tier Model Extraction Status / Quick Entry Card
+                        val isRunningExtraction = extractionState.status == ExtractionStateStatus.EXTRACTING
+                        val hasFoundHighTier = extractionState.status == ExtractionStateStatus.HIGH_TIER_FOUND
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = when {
+                                hasFoundHighTier -> StatusEmerald.copy(alpha = 0.15f)
+                                isRunningExtraction -> StatusSky.copy(alpha = 0.15f)
+                                else -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showExtractionSheet = true }
+                                .testTag("extraction_panel_banner")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Casino,
+                                        contentDescription = null,
+                                        tint = when {
+                                            hasFoundHighTier -> StatusEmerald
+                                            isRunningExtraction -> StatusSky
+                                            else -> MaterialTheme.colorScheme.tertiary
+                                        },
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = when {
+                                            hasFoundHighTier -> "🎉 成功捕获高阶模型: ${extractionState.foundModelTier?.title ?: "Tier S"}！"
+                                            isRunningExtraction -> "🎰 抽取中 (第 ${extractionState.currentAttempt} 轮) | 已淘汰 ${extractionState.discardedCount} 个低阶模型"
+                                            else -> "🎰 并行自动抽取高级模型 (指纹抗缓存/自动淘汰低阶)"
+                                        },
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = when {
+                                            hasFoundHighTier -> StatusEmerald
+                                            isRunningExtraction -> StatusSky
+                                            else -> MaterialTheme.colorScheme.onSurface
+                                        },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Text(
+                                    text = if (isRunningExtraction) "查看 >" else "设置 >",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
 
@@ -770,6 +868,14 @@ fun ArenaRunnerScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
+        }
+
+        // Parallel High-Tier Extraction Sheet
+        if (showExtractionSheet) {
+            ArenaExtractionSheet(
+                viewModel = viewModel,
+                onDismiss = { showExtractionSheet = false }
+            )
         }
     }
 }
