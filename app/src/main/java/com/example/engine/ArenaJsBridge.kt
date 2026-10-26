@@ -46,6 +46,13 @@ sealed interface BridgeEvent {
         val url: String
     ) : BridgeEvent
 
+    data class ModelIdentityDetected(
+        val modelAName: String,
+        val modelBName: String,
+        val isOfficialReveal: Boolean,
+        val detectionSource: String
+    ) : BridgeEvent
+
     data class VoteSubmitted(
         val winner: String // "model_a", "model_b", "tie", "both_bad"
     ) : BridgeEvent
@@ -59,6 +66,18 @@ sealed interface BridgeEvent {
 class ArenaJsBridge {
     private val _events = MutableSharedFlow<BridgeEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<BridgeEvent> = _events.asSharedFlow()
+
+    @JavascriptInterface
+    fun onModelIdentityDetected(modelAName: String, modelBName: String, isOfficialReveal: Boolean, detectionSource: String) {
+        _events.tryEmit(
+            BridgeEvent.ModelIdentityDetected(
+                modelAName = modelAName,
+                modelBName = modelBName,
+                isOfficialReveal = isOfficialReveal,
+                detectionSource = detectionSource
+            )
+        )
+    }
 
     @JavascriptInterface
     fun onStreamProgress(totalChars: Int, isStreaming: Boolean, snippetA: String, snippetB: String) {

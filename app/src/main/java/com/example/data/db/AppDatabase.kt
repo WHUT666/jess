@@ -130,7 +130,7 @@ abstract class AppDatabase : RoomDatabase() {
                     title = "分布式缓存双写一致性对比与第一性原理推演",
                     createdAt = now - 3600000,
                     updatedAt = now - 1800000,
-                    mode = "SANDBOX",
+                    mode = "ARENA_ONLINE",
                     modelAName = "Model A (Gemini 1.5 Pro)",
                     modelBName = "Model B (Claude 3.5 Sonnet)",
                     totalTurns = 2,

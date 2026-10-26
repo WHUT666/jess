@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.model.ArenaAccountInfo
 import com.example.data.model.AutomationRule
 import com.example.data.model.ConversationSessionEntity
+import com.example.data.model.ModelIdentityInfo
 import com.example.data.model.PromptEntity
 import com.example.data.model.SequencingMode
 import com.example.data.model.SessionWithTurns
@@ -89,6 +90,12 @@ class ArenaPilotViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.Lazily, null)
 
+    private val _detectedModelA = MutableStateFlow(ModelIdentityInfo(rawName = "Model A (盲测中)"))
+    val detectedModelA: StateFlow<ModelIdentityInfo> = _detectedModelA.asStateFlow()
+
+    private val _detectedModelB = MutableStateFlow(ModelIdentityInfo(rawName = "Model B (盲测中)"))
+    val detectedModelB: StateFlow<ModelIdentityInfo> = _detectedModelB.asStateFlow()
+
     fun getSessionWithTurnsFlow(sessionId: Long) = repository.getSessionWithTurnsFlow(sessionId)
 
     private val _toastMessages = MutableSharedFlow<String>(extraBufferCapacity = 16)
@@ -143,7 +150,7 @@ class ArenaPilotViewModel(
                     val currentSessId = _activeSessionId.value ?: run {
                         val newId = repository.createNewConversationSession(
                             title = event.userPrompt.take(28),
-                            mode = if (rules.value.isSandboxMode) "SANDBOX" else "ARENA_ONLINE",
+                            mode = "ARENA_ONLINE",
                             modelA = event.modelAName,
                             modelB = event.modelBName
                         )
@@ -172,6 +179,24 @@ class ArenaPilotViewModel(
                         lastSyncTime = System.currentTimeMillis()
                     )
                 )
+            }
+
+            is BridgeEvent.ModelIdentityDetected -> {
+                val providerA = ModelIdentityInfo.resolveProvider(event.modelAName)
+                val providerB = ModelIdentityInfo.resolveProvider(event.modelBName)
+                _detectedModelA.value = ModelIdentityInfo(
+                    rawName = event.modelAName,
+                    providerFamily = providerA,
+                    isRevealed = event.isOfficialReveal,
+                    detectionSource = event.detectionSource
+                )
+                _detectedModelB.value = ModelIdentityInfo(
+                    rawName = event.modelBName,
+                    providerFamily = providerB,
+                    isRevealed = event.isOfficialReveal,
+                    detectionSource = event.detectionSource
+                )
+                _toastMessages.tryEmit("模型识别成功: ${event.modelAName} ⚔️ ${event.modelBName} [${event.detectionSource}]")
             }
 
             is BridgeEvent.VoteSubmitted -> {
@@ -402,21 +427,29 @@ class ArenaPilotViewModel(
         _currentPromptIndex.value = 0
         _status.value = AutomationStatus.IDLE
         _telemetry.value = UiTelemetry()
+        _detectedModelA.value = ModelIdentityInfo(rawName = "Model A (盲测中)")
+        _detectedModelB.value = ModelIdentityInfo(rawName = "Model B (盲测中)")
 
         viewModelScope.launch {
             val title = customTitle.ifBlank { "Arena 对战 ${System.currentTimeMillis() % 10000}" }
             val newSessionId = repository.createNewConversationSession(
                 title = title,
-                mode = if (rules.value.isSandboxMode) "SANDBOX" else "ARENA_ONLINE"
+                mode = "ARENA_ONLINE"
             )
             _activeSessionId.value = newSessionId
 
-            // Trigger JS to clear chat in web / sandbox
+            // Trigger JS to start new battle in Arena web
             val script = "if (window.ArenaPilotBridge_newBattle) { window.ArenaPilotBridge_newBattle(); }"
             jsEvaluator?.invoke(script)
 
             _toastMessages.tryEmit("已开启新对战会话: $title")
         }
+    }
+
+    fun probeModelIdentities() {
+        val script = "if (window.ArenaPilotBridge_probeIdentity) { window.ArenaPilotBridge_probeIdentity(); }"
+        jsEvaluator?.invoke(script)
+        _toastMessages.tryEmit("已注入模型指纹探测引导词，诱导模型自报架构")
     }
 
     fun selectSession(sessionId: Long) {
@@ -489,12 +522,6 @@ class ArenaPilotViewModel(
         _status.value = AutomationStatus.IDLE
         _telemetry.value = UiTelemetry()
         _toastMessages.tryEmit("对战会话与计数已重置")
-    }
-
-    fun setSandboxMode(enabled: Boolean) {
-        val updated = rules.value.copy(isSandboxMode = enabled)
-        repository.updateRules(updated)
-        resetSession()
     }
 
     fun updateRules(newRules: AutomationRule) {

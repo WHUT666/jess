@@ -48,11 +48,9 @@ import com.example.viewmodel.AutomationStatus
 fun ArenaTopBar(
     status: AutomationStatus,
     countdownSeconds: Int,
-    isSandboxMode: Boolean,
     isAutoSendEnabled: Boolean,
     isLoggedIn: Boolean,
     onToggleAutoSend: () -> Unit,
-    onToggleSandbox: (Boolean) -> Unit,
     onResetSession: () -> Unit,
     onOpenAccount: () -> Unit
 ) {
@@ -130,26 +128,6 @@ fun ArenaTopBar(
             }
         },
         actions = {
-            FilterChip(
-                selected = isSandboxMode,
-                onClick = { onToggleSandbox(!isSandboxMode) },
-                label = { Text(if (isSandboxMode) "沙盒" else "在线", fontSize = 11.sp) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Science,
-                        contentDescription = "Toggle Sandbox",
-                        modifier = Modifier.size(13.dp)
-                    )
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                ),
-                modifier = Modifier
-                    .padding(end = 2.dp)
-                    .testTag("sandbox_mode_chip")
-            )
-
             // Account & Login Button
             IconButton(
                 onClick = onOpenAccount,

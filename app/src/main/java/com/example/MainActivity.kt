@@ -89,11 +89,9 @@ fun MainAppScreen(viewModel: ArenaPilotViewModel) {
             ArenaTopBar(
                 status = status,
                 countdownSeconds = countdown,
-                isSandboxMode = rules.isSandboxMode,
                 isAutoSendEnabled = rules.isAutoSendEnabled,
                 isLoggedIn = accountInfo.isLoggedIn,
                 onToggleAutoSend = { viewModel.toggleAutoSend() },
-                onToggleSandbox = { viewModel.setSandboxMode(it) },
                 onResetSession = { viewModel.resetSession() },
                 onOpenAccount = { showAccountSheet = true }
             )
@@ -131,7 +129,6 @@ fun MainAppScreen(viewModel: ArenaPilotViewModel) {
             viewModel = viewModel,
             onDismiss = { showAccountSheet = false },
             onOpenArenaLoginUrl = {
-                viewModel.setSandboxMode(false)
                 pendingNavigateUrl = "https://lmarena.ai/"
                 selectedTab = 0
             }

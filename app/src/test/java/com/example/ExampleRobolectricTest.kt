@@ -2,6 +2,7 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.model.ModelIdentityInfo
 import com.example.data.model.SequencingMode
 import com.example.engine.ArenaJsBridge
 import org.junit.Assert.assertEquals
@@ -32,5 +33,15 @@ class ExampleRobolectricTest {
     fun `verify bridge instantiates properly`() {
         val bridge = ArenaJsBridge()
         assertNotNull(bridge.events)
+    }
+
+    @Test
+    fun `verify model provider resolution`() {
+        assertEquals("OpenAI", ModelIdentityInfo.resolveProvider("gpt-4o-2024-08-06"))
+        assertEquals("Anthropic", ModelIdentityInfo.resolveProvider("claude-3-5-sonnet"))
+        assertEquals("Google", ModelIdentityInfo.resolveProvider("gemini-1.5-pro"))
+        assertEquals("DeepSeek", ModelIdentityInfo.resolveProvider("deepseek-v2.5"))
+        assertEquals("Meta", ModelIdentityInfo.resolveProvider("llama-3.1-70b-instruct"))
+        assertEquals("Alibaba Qwen", ModelIdentityInfo.resolveProvider("qwen-2.5-72b"))
     }
 }

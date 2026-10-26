@@ -65,7 +65,6 @@ class ArenaRepository(
         val pauseKeywords = prefs.getBoolean("pause_keywords", true)
         val stopKeywords = prefs.getString("stop_keywords", "抱歉, 无法回答, 触发安全, I cannot, As an AI language model") ?: ""
         val targetUrl = prefs.getString("target_url", "https://lmarena.ai/") ?: "https://lmarena.ai/"
-        val isSandbox = prefs.getBoolean("is_sandbox_mode", true)
 
         return AutomationRule(
             silenceTimeoutSeconds = timeout,
@@ -75,8 +74,7 @@ class ArenaRepository(
             soundVibrationEnabled = soundVib,
             pauseOnStopKeywords = pauseKeywords,
             stopKeywords = stopKeywords,
-            targetUrl = targetUrl,
-            isSandboxMode = isSandbox
+            targetUrl = targetUrl
         )
     }
 
@@ -112,7 +110,6 @@ class ArenaRepository(
             putBoolean("pause_keywords", newRules.pauseOnStopKeywords)
             putString("stop_keywords", newRules.stopKeywords)
             putString("target_url", newRules.targetUrl)
-            putBoolean("is_sandbox_mode", newRules.isSandboxMode)
             apply()
         }
         _rulesFlow.value = newRules

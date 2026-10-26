@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forward
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Button
@@ -76,9 +77,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.data.model.ModelIdentityInfo
 import com.example.data.model.PromptEntity
 import com.example.engine.ArenaMonitorScript
-import com.example.engine.ArenaSandboxHtml
+import com.example.ui.theme.ModelABlue
+import com.example.ui.theme.ModelBPink
 import com.example.ui.theme.StatusAmber
 import com.example.ui.theme.StatusEmerald
 import com.example.ui.theme.StatusRose
@@ -100,6 +103,8 @@ fun ArenaRunnerScreen(
     val telemetry by viewModel.telemetry.collectAsState()
     val rules by viewModel.rules.collectAsState()
     val allPrompts by viewModel.allPrompts.collectAsState(initial = emptyList())
+    val modelA by viewModel.detectedModelA.collectAsState()
+    val modelB by viewModel.detectedModelB.collectAsState()
 
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var webProgress by remember { mutableStateOf(0) }
@@ -117,14 +122,8 @@ fun ArenaRunnerScreen(
         }
     }
 
-    LaunchedEffect(rules.isSandboxMode, rules.targetUrl) {
-        webViewInstance?.let { wv ->
-            if (rules.isSandboxMode) {
-                wv.loadDataWithBaseURL("https://lmarena.ai", ArenaSandboxHtml.getHtml(), "text/html", "UTF-8", null)
-            } else {
-                wv.loadUrl(rules.targetUrl)
-            }
-        }
+    LaunchedEffect(rules.targetUrl) {
+        webViewInstance?.loadUrl(rules.targetUrl)
     }
 
     LaunchedEffect(navigateToUrl) {
@@ -209,11 +208,7 @@ fun ArenaRunnerScreen(
                         }
                     }
 
-                    if (rules.isSandboxMode) {
-                        loadDataWithBaseURL("https://lmarena.ai", ArenaSandboxHtml.getHtml(), "text/html", "UTF-8", null)
-                    } else {
-                        loadUrl(rules.targetUrl)
-                    }
+                    loadUrl(rules.targetUrl)
                     webViewInstance = this
                 }
             }
@@ -321,6 +316,94 @@ fun ArenaRunnerScreen(
                 }
             }
 
+            // Model Identity Detection & Fingerprint Strip
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp)
+                    .testTag("model_detection_strip"),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = ModelABlue.copy(alpha = 0.15f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(ModelABlue))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = modelA.rawName,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ModelABlue,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        Text("⚔️", fontSize = 10.sp)
+
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = ModelBPink.copy(alpha = 0.15f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(ModelBPink))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = modelB.rawName,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ModelBPink,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
+                    FilledTonalButton(
+                        onClick = { viewModel.probeModelIdentities() },
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier
+                            .height(28.dp)
+                            .testTag("probe_model_identity_btn")
+                    ) {
+                        Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = if (modelA.isRevealed || modelB.isRevealed) "重探" else "探针识模",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
             // Main Control & Telemetry Bar
             Card(
                 modifier = Modifier
@@ -421,11 +504,7 @@ fun ArenaRunnerScreen(
 
                         IconButton(
                             onClick = {
-                                if (rules.isSandboxMode) {
-                                    webViewInstance?.loadDataWithBaseURL("https://lmarena.ai", ArenaSandboxHtml.getHtml(), "text/html", "UTF-8", null)
-                                } else {
-                                    webViewInstance?.reload()
-                                }
+                                webViewInstance?.reload()
                             },
                             modifier = Modifier
                                 .size(36.dp)

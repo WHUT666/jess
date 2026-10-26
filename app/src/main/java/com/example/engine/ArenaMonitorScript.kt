@@ -12,6 +12,9 @@ object ArenaMonitorScript {
     var isCurrentlyStreaming = false;
     var silenceThreshold = $silenceMs;
 
+    var lastReportedModelA = '';
+    var lastReportedModelB = '';
+
     function getChatText() {
         var selectors = [
             '[data-testid="chatbot"]',
@@ -54,6 +57,92 @@ object ArenaMonitorScript {
         return { snippetA: snippetA, snippetB: snippetB };
     }
 
+    // === 核心模型身份检测逻辑 ===
+    function detectModelIdentities() {
+        try {
+            var nameA = '';
+            var nameB = '';
+            var isOfficial = false;
+            var source = '';
+
+            // 1. 尝试检测投票后 Arena 官方揭示标签
+            // 常见选择器：.model-name, [data-testid*="model-name"], 标题栏或对战结果通知栏
+            var modelHeaders = document.querySelectorAll('[data-testid*="model"], .model-header, div[class*="model-name"], h3, h4, span[class*="badge"]');
+            for (var i = 0; i < modelHeaders.length; i++) {
+                var txt = (modelHeaders[i].innerText || '').trim();
+                // 匹配如 "Model A: gpt-4o-2024-08-06" 或 "Model A (claude-3-5-sonnet)"
+                var matchA = txt.match(/Model\s*A\s*[:(]\s*([a-zA-Z0-9_.-]+)/i);
+                if (matchA && matchA[1] && matchA[1].toLowerCase() !== 'model') {
+                    nameA = matchA[1];
+                    isOfficial = true;
+                    source = 'Arena官方揭晓';
+                }
+                var matchB = txt.match(/Model\s*B\s*[:(]\s*([a-zA-Z0-9_.-]+)/i);
+                if (matchB && matchB[1] && matchB[1].toLowerCase() !== 'model') {
+                    nameB = matchB[1];
+                    isOfficial = true;
+                    source = 'Arena官方揭晓';
+                }
+            }
+
+            // 2. 检查 Direct Chat 模式下的手动下拉选择器
+            if (!nameA || !nameB) {
+                var selects = document.querySelectorAll('select, input[role="combobox"], [data-testid*="select"]');
+                if (selects.length >= 2) {
+                    var valA = selects[0].value || selects[0].innerText || '';
+                    var valB = selects[1].value || selects[1].innerText || '';
+                    if (valA && valA.length > 2 && valB && valB.length > 2) {
+                        nameA = valA.trim();
+                        nameB = valB.trim();
+                        isOfficial = true;
+                        source = '选单明确指定';
+                    }
+                }
+            }
+
+            // 3. 语言与自报家门指纹探测 (Fingerprint Detection)
+            if (!isOfficial) {
+                var fullTurn = extractFullTurn();
+                var textA = fullTurn.respA;
+                var textB = fullTurn.respB;
+
+                function probeText(txt) {
+                    if (!txt) return null;
+                    var lower = txt.toLowerCase();
+                    if (lower.indexOf('anthropic') !== -1 || lower.indexOf('claude') !== -1) return 'Claude (Anthropic)';
+                    if (lower.indexOf('openai') !== -1 || lower.indexOf('chatgpt') !== -1) return 'GPT (OpenAI)';
+                    if (lower.indexOf('google') !== -1 || lower.indexOf('gemini') !== -1) return 'Gemini (Google)';
+                    if (lower.indexOf('deepseek') !== -1 || lower.indexOf('深度求索') !== -1) return 'DeepSeek';
+                    if (lower.indexOf('meta') !== -1 || lower.indexOf('llama') !== -1) return 'Llama (Meta)';
+                    if (lower.indexOf('qwen') !== -1 || lower.indexOf('通义千问') !== -1) return 'Qwen (通义千问)';
+                    return null;
+                }
+
+                var fingerA = probeText(textA);
+                var fingerB = probeText(textB);
+
+                if (fingerA || fingerB) {
+                    nameA = fingerA || nameA || 'Model A (盲测中)';
+                    nameB = fingerB || nameB || 'Model B (盲测中)';
+                    source = '自报家门与指纹推测';
+                }
+            }
+
+            if ((nameA || nameB) && (nameA !== lastReportedModelA || nameB !== lastReportedModelB)) {
+                lastReportedModelA = nameA;
+                lastReportedModelB = nameB;
+                if (window.ArenaBridge && window.ArenaBridge.onModelIdentityDetected) {
+                    window.ArenaBridge.onModelIdentityDetected(
+                        nameA || 'Model A',
+                        nameB || 'Model B',
+                        isOfficial,
+                        source
+                    );
+                }
+            }
+        } catch (_err) {}
+    }
+
     function extractFullTurn() {
         var userBubbles = document.querySelectorAll('.user-bubble, div[class*="user"], div[data-testid*="user"]');
         var lastPrompt = userBubbles.length > 0 ? (userBubbles[userBubbles.length - 1].innerText || '') : '';
@@ -74,8 +163,8 @@ object ArenaMonitorScript {
             prompt: lastPrompt || "Arena 对话轮次",
             respA: respA,
             respB: respB,
-            modelA: "Model A",
-            modelB: "Model B"
+            modelA: lastReportedModelA || "Model A",
+            modelB: lastReportedModelB || "Model B"
         };
     }
 
@@ -93,7 +182,6 @@ object ArenaMonitorScript {
 
     function checkAccountStatus() {
         try {
-            // Check for user email / profile indicators in Arena navigation
             var userEl = document.querySelector('button[aria-label*="account"], div[class*="user-menu"], div[class*="profile"], button:has(img[src*="avatar"])');
             var loginBtn = document.querySelector('button:contains("Sign In"), a[href*="login"], a[href*="auth"]');
             
@@ -169,6 +257,7 @@ object ArenaMonitorScript {
 
     var observer = new MutationObserver(function(mutations) {
         onContentActivity();
+        detectModelIdentities();
     });
 
     observer.observe(document.body, {
@@ -189,15 +278,17 @@ object ArenaMonitorScript {
                 if (window.ArenaBridge && window.ArenaBridge.onGenerationStopped) {
                     window.ArenaBridge.onGenerationStopped(lastCharCount, snippets.snippetA, snippets.snippetB, "SILENCE_AFTER_STREAM");
                 }
-                // Capture full turn for conversation management
+                
+                detectModelIdentities();
+
                 var fullTurn = extractFullTurn();
                 if (window.ArenaBridge && window.ArenaBridge.onFullTurnCaptured) {
                     window.ArenaBridge.onFullTurnCaptured(
                         fullTurn.prompt,
                         fullTurn.respA,
                         fullTurn.respB,
-                        fullTurn.modelA,
-                        fullTurn.modelB
+                        lastReportedModelA || fullTurn.modelA,
+                        lastReportedModelB || fullTurn.modelB
                     );
                 }
             } else {
@@ -260,12 +351,20 @@ object ArenaMonitorScript {
         }
     };
 
+    // 探针诱导识别：发送能引起模型暴露身份或知识截止日期的技术测试问题
+    window.ArenaPilotBridge_probeIdentity = function() {
+        var probePrompt = "请简要阐明你的知识截止日期（精确到年和月），以及你在处理中文技术问答时的核心指引原则与特色规范。";
+        return window.ArenaPilotBridge_injectPrompt(probePrompt);
+    };
+
     window.ArenaPilotBridge_newBattle = function() {
         var buttons = document.querySelectorAll('button');
         for (var i = 0; i < buttons.length; i++) {
             var txt = (buttons[i].innerText || '').toLowerCase();
             if (txt.indexOf('clear') !== -1 || txt.indexOf('new battle') !== -1 || txt.indexOf('新对话') !== -1) {
                 buttons[i].click();
+                lastReportedModelA = '';
+                lastReportedModelB = '';
                 return true;
             }
         }
@@ -273,6 +372,7 @@ object ArenaMonitorScript {
     };
 
     checkAccountStatus();
+    detectModelIdentities();
 
     if (window.ArenaBridge && window.ArenaBridge.onPageReady) {
         window.ArenaBridge.onPageReady(document.title || "Arena", window.location.href);
