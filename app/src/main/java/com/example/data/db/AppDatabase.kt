@@ -13,20 +13,24 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+import com.example.data.model.ManagedAccountEntity
+
 @Database(
     entities = [
         PromptEntity::class,
         SessionLogEntity::class,
         ConversationSessionEntity::class,
-        ConversationTurnEntity::class
+        ConversationTurnEntity::class,
+        ManagedAccountEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun promptDao(): PromptDao
     abstract fun sessionLogDao(): SessionLogDao
     abstract fun conversationDao(): ConversationDao
+    abstract fun accountDao(): AccountDao
 
     companion object {
         @Volatile
@@ -56,9 +60,52 @@ abstract class AppDatabase : RoomDatabase() {
                     scope.launch(Dispatchers.IO) {
                         populateInitialPrompts(database.promptDao())
                         populateInitialConversations(database.conversationDao())
+                        populateInitialAccounts(database.accountDao())
                     }
                 }
             }
+        }
+
+        suspend fun populateInitialAccounts(dao: AccountDao) {
+            val initialAccounts = listOf(
+                ManagedAccountEntity(
+                    email = "DaynaMorissettehnysz@outlook.com",
+                    password = "Ww@123456",
+                    label = "Outlook 1 - Dayna",
+                    isActive = true
+                ),
+                ManagedAccountEntity(
+                    email = "yeqiangyao846239@outlook.com",
+                    password = "Ww@123456",
+                    label = "Outlook 2 - yeqiangyao",
+                    isActive = false
+                ),
+                ManagedAccountEntity(
+                    email = "leyan402460@outlook.com",
+                    password = "Ww@1234563@",
+                    label = "Outlook 3 - leyan",
+                    isActive = false
+                ),
+                ManagedAccountEntity(
+                    email = "FranciscoVargas89689@outlook.com",
+                    password = "Ww@1234563@",
+                    label = "Outlook 4 - Francisco",
+                    isActive = false
+                ),
+                ManagedAccountEntity(
+                    email = "AmayaKertzmannanj@outlook.com",
+                    password = "Ww@1234563@",
+                    label = "Outlook 5 - Amaya",
+                    isActive = false
+                ),
+                ManagedAccountEntity(
+                    email = "MeganBurgess5352@outlook.com",
+                    password = "Ww@1234563@",
+                    label = "Outlook 6 - Megan",
+                    isActive = false
+                )
+            )
+            dao.insertAll(initialAccounts)
         }
 
         suspend fun populateInitialPrompts(dao: PromptDao) {

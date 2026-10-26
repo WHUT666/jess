@@ -63,6 +63,8 @@ class ArenaPilotViewModel(
     val rules = repository.rulesFlow
     val allConversations = repository.allConversations
     val accountInfo = repository.accountFlow
+    val allManagedAccounts = repository.allManagedAccounts
+    val activeManagedAccount = repository.activeManagedAccount
 
     private val _status = MutableStateFlow(AutomationStatus.IDLE)
     val status: StateFlow<AutomationStatus> = _status.asStateFlow()
@@ -512,6 +514,51 @@ class ArenaPilotViewModel(
             )
         )
         _toastMessages.tryEmit("已退出账号")
+    }
+
+    // === 多账号与自动填密功能 ===
+
+    fun autoFillCurrentPage(email: String, pass: String) {
+        val safeEmail = email.replace("'", "\\'").replace("\\", "\\\\")
+        val safePass = pass.replace("'", "\\'").replace("\\", "\\\\")
+        val script = "if (window.ArenaPilotBridge_autoFillLogin) { window.ArenaPilotBridge_autoFillLogin('$safeEmail', '$safePass'); }"
+        jsEvaluator?.invoke(script)
+        _toastMessages.tryEmit("已触发表单自动填密: $email")
+    }
+
+    fun switchAccount(account: com.example.data.model.ManagedAccountEntity, clearCookies: Boolean = true) {
+        viewModelScope.launch {
+            repository.setActiveManagedAccount(account.id)
+            if (clearCookies) {
+                try {
+                    android.webkit.CookieManager.getInstance().removeAllCookies(null)
+                    android.webkit.CookieManager.getInstance().flush()
+                } catch (_: Exception) {}
+            }
+            autoFillCurrentPage(account.email, account.password)
+            _toastMessages.tryEmit("已切换至: ${account.label} (${account.email})")
+        }
+    }
+
+    fun addManagedAccount(email: String, pass: String, label: String, notes: String = "") {
+        viewModelScope.launch {
+            repository.addManagedAccount(email, pass, label, notes)
+            _toastMessages.tryEmit("成功添加账号: $label")
+        }
+    }
+
+    fun updateManagedAccount(account: com.example.data.model.ManagedAccountEntity) {
+        viewModelScope.launch {
+            repository.updateManagedAccount(account)
+            _toastMessages.tryEmit("账号信息已更新")
+        }
+    }
+
+    fun deleteManagedAccount(account: com.example.data.model.ManagedAccountEntity) {
+        viewModelScope.launch {
+            repository.deleteManagedAccount(account)
+            _toastMessages.tryEmit("已移除账号: ${account.label}")
+        }
     }
 
     fun resetSession() {

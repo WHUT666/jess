@@ -27,12 +27,15 @@ class ArenaRepository(
     private val promptDao = database.promptDao()
     private val sessionLogDao = database.sessionLogDao()
     private val conversationDao = database.conversationDao()
+    private val accountDao = database.accountDao()
     private val prefs: SharedPreferences =
         context.getSharedPreferences("arena_pilot_prefs", Context.MODE_PRIVATE)
 
     val allPrompts: Flow<List<PromptEntity>> = promptDao.getAllPromptsFlow()
     val allLogs: Flow<List<SessionLogEntity>> = sessionLogDao.getAllLogsFlow()
     val allConversations: Flow<List<ConversationSessionEntity>> = conversationDao.getAllSessionsFlow()
+    val allManagedAccounts: Flow<List<com.example.data.model.ManagedAccountEntity>> = accountDao.getAllAccountsFlow()
+    val activeManagedAccount: Flow<com.example.data.model.ManagedAccountEntity?> = accountDao.getActiveAccountFlow()
 
     private val _rulesFlow = MutableStateFlow(loadRulesFromPrefs())
     val rulesFlow: StateFlow<AutomationRule> = _rulesFlow.asStateFlow()
@@ -47,6 +50,9 @@ class ArenaRepository(
             }
             if (conversationDao.countSessions() == 0) {
                 AppDatabase.populateInitialConversations(conversationDao)
+            }
+            if (accountDao.count() == 0) {
+                AppDatabase.populateInitialAccounts(accountDao)
             }
         }
     }
@@ -278,5 +284,45 @@ class ArenaRepository(
 
     suspend fun clearSessionLogs() {
         sessionLogDao.clearAll()
+    }
+
+    // === 多账户管理方法 ===
+
+    suspend fun addManagedAccount(email: String, pass: String, label: String, notes: String = ""): Long {
+        val entity = com.example.data.model.ManagedAccountEntity(
+            email = email.trim(),
+            password = pass.trim(),
+            label = label.trim().ifBlank { email.substringBefore("@") },
+            isActive = false,
+            notes = notes
+        )
+        return accountDao.insert(entity)
+    }
+
+    suspend fun updateManagedAccount(account: com.example.data.model.ManagedAccountEntity) {
+        accountDao.update(account)
+    }
+
+    suspend fun deleteManagedAccount(account: com.example.data.model.ManagedAccountEntity) {
+        accountDao.delete(account)
+    }
+
+    suspend fun setActiveManagedAccount(id: Long) {
+        accountDao.setActiveAccount(id)
+        val selected = accountDao.getAccountById(id)
+        if (selected != null) {
+            val cur = _accountFlow.value
+            updateAccount(
+                cur.copy(
+                    displayName = selected.label,
+                    email = selected.email,
+                    isLoggedIn = true
+                )
+            )
+        }
+    }
+
+    suspend fun getActiveManagedAccount(): com.example.data.model.ManagedAccountEntity? {
+        return accountDao.getActiveAccount()
     }
 }

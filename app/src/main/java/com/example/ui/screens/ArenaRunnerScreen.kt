@@ -37,16 +37,19 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Forward
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -65,6 +68,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,7 +81,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.example.data.model.ModelIdentityInfo
 import com.example.data.model.PromptEntity
 import com.example.engine.ArenaMonitorScript
 import com.example.ui.theme.ModelABlue
@@ -94,7 +97,10 @@ import com.example.viewmodel.AutomationStatus
 @Composable
 fun ArenaRunnerScreen(
     viewModel: ArenaPilotViewModel,
-    navigateToUrl: String? = null
+    navigateToUrl: String? = null,
+    isImmersiveFullscreen: Boolean = false,
+    onToggleImmersiveFullscreen: () -> Unit = {},
+    onOpenAccountSheet: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val status by viewModel.status.collectAsState()
@@ -105,11 +111,15 @@ fun ArenaRunnerScreen(
     val allPrompts by viewModel.allPrompts.collectAsState(initial = emptyList())
     val modelA by viewModel.detectedModelA.collectAsState()
     val modelB by viewModel.detectedModelB.collectAsState()
+    val activeAccount by viewModel.activeManagedAccount.collectAsState(initial = null)
 
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var webProgress by remember { mutableStateOf(0) }
     var isLoadingWeb by remember { mutableStateOf(true) }
     var showQuickInjectSheet by remember { mutableStateOf(false) }
+
+    // HUD collapsed by default to avoid blocking arena web buttons and grid
+    var isHudCollapsed by rememberSaveable { mutableStateOf(true) }
 
     DisposableEffect(webViewInstance) {
         viewModel.jsEvaluator = { script ->
@@ -133,6 +143,7 @@ fun ArenaRunnerScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // Main Web View - Takes Full Screen Space
         AndroidView(
             modifier = Modifier
                 .fillMaxSize()
@@ -152,11 +163,9 @@ fun ArenaRunnerScreen(
                         setSupportMultipleWindows(true)
                         javaScriptCanOpenWindowsAutomatically = true
                         mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                        // Modern Chrome UA for OAuth & Arena compatibility
                         userAgentString = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
                     }
 
-                    // Enable Cookie synchronization
                     val cookieManager = CookieManager.getInstance()
                     cookieManager.setAcceptCookie(true)
                     cookieManager.setAcceptThirdPartyCookies(this, true)
@@ -180,7 +189,6 @@ fun ArenaRunnerScreen(
                         }
 
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                            // Keep OAuth and internal arena navigations within the webview
                             return false
                         }
                     }
@@ -200,7 +208,6 @@ fun ArenaRunnerScreen(
                             isUserGesture: Boolean,
                             resultMsg: Message?
                         ): Boolean {
-                            // Support OAuth popups by redirecting to this same WebView
                             val transport = resultMsg?.obj as? WebView.WebViewTransport
                             transport?.webView = view
                             resultMsg?.sendToTarget()
@@ -214,6 +221,7 @@ fun ArenaRunnerScreen(
             }
         )
 
+        // Web Loading Progress Indicator
         if (isLoadingWeb && webProgress < 100) {
             LinearProgressIndicator(
                 progress = { webProgress / 100f },
@@ -223,13 +231,61 @@ fun ArenaRunnerScreen(
             )
         }
 
-        // Bottom Docked Automation HUD
+        // Top-Right Floating Controls (Quick Fullscreen & Refresh Toggle)
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onToggleImmersiveFullscreen,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("toggle_fullscreen_btn")
+                    ) {
+                        Icon(
+                            imageVector = if (isImmersiveFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = if (isImmersiveFullscreen) "退出全屏" else "全屏沉浸(不挡网页)",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { webViewInstance?.reload() },
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("reload_webview_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "刷新页面",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Floating Bottom HUD Area - Designed to NOT obstruct Arena's grid or login buttons
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(12.dp)
+                .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
+            // Countdown Notification Card (if triggered)
             AnimatedVisibility(
                 visible = status == AutomationStatus.COUNTDOWN,
                 enter = slideInVertically { it } + fadeIn(),
@@ -238,281 +294,371 @@ fun ArenaRunnerScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 8.dp)
+                        .padding(bottom = 6.dp)
                         .testTag("countdown_hud_card"),
                     colors = CardDefaults.cardColors(
-                        containerColor = StatusAmber.copy(alpha = 0.95f),
+                        containerColor = StatusAmber.copy(alpha = 0.96f),
                         contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "$countdown",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = Color.Black
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "检测停顿！${countdown}s 后引导",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Button(
+                                onClick = { viewModel.triggerImmediateSend() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.Black,
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .testTag("send_now_button")
+                            ) {
+                                Text("立即发送", fontSize = 11.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = { viewModel.cancelCountdown() },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Black),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .testTag("cancel_countdown_button")
+                            ) {
+                                Text("取消", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Collapsible Floating Control Pill / Expanded Panel
+            if (isHudCollapsed) {
+                // MINIMAL NON-BLOCKING FLOATING PILL (Only ~40dp tall, leaves 100% of grid clickable)
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("collapsed_floating_pill"),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                    shadowElevation = 8.dp,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        // Left: Round & Status badge
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { isHudCollapsed = false }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when (status) {
+                                            AutomationStatus.STREAMING -> StatusSky
+                                            AutomationStatus.COUNTDOWN -> StatusAmber
+                                            AutomationStatus.SENDING -> MaterialTheme.colorScheme.primary
+                                            else -> if (rules.isAutoSendEnabled) StatusEmerald else Color.Gray
+                                        }
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "第 $currentTurn 轮",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (telemetry.charsDetected > 0) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "(${telemetry.charsDetected}字)",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        // Right: Quick Actions (Auto-Fill Login, New Battle, Expand)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            // Quick Auto Fill Button
+                            FilledTonalButton(
+                                onClick = {
+                                    val acc = activeAccount
+                                    if (acc != null) {
+                                        viewModel.autoFillCurrentPage(acc.email, acc.password)
+                                    } else {
+                                        onOpenAccountSheet()
+                                    }
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .testTag("quick_fill_login_pill_btn")
+                            ) {
+                                Icon(imageVector = Icons.Default.Key, contentDescription = null, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = if (activeAccount != null) "一键填密" else "选账号",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            // Quick Battle Trigger
+                            FilledTonalButton(
+                                onClick = { viewModel.startNewBattle() },
+                                shape = RoundedCornerShape(14.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .testTag("quick_new_battle_pill_btn")
+                            ) {
+                                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("开启对战", fontSize = 10.sp)
+                            }
+
+                            // Expand / Collapse Chevron Button
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clickable { isHudCollapsed = false }
+                                    .testTag("expand_hud_btn")
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowUp,
+                                        contentDescription = "展开面板",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // EXPANDED CONTROL PANEL (Can be closed anytime)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("runner_control_panel"),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
                     ),
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        // Title bar with collapse button
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
+                                Text(
+                                    text = "对战监控与引导面板",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer
                                 ) {
                                     Text(
-                                        text = "$countdown",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        color = Color.Black
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "检测到对话停顿！准备引导继续",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp
-                                    )
-                                    Text(
-                                        text = "${countdown}秒后自动发送下个提示词",
-                                        fontSize = 11.sp,
-                                        color = Color.Black.copy(alpha = 0.75f)
+                                        text = "第 $currentTurn / ${rules.maxRounds} 轮",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                                     )
                                 }
                             }
 
-                            Row {
-                                Button(
-                                    onClick = { viewModel.triggerImmediateSend() },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color.Black,
-                                        contentColor = Color.White
-                                    ),
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                    modifier = Modifier.testTag("send_now_button")
-                                ) {
-                                    Icon(imageVector = Icons.Default.Send, contentDescription = "立即发送", modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("立即发送", fontSize = 12.sp)
-                                }
-
-                                Spacer(modifier = Modifier.width(6.dp))
-
-                                OutlinedButton(
-                                    onClick = { viewModel.cancelCountdown() },
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Black),
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                    modifier = Modifier.testTag("cancel_countdown_button")
-                                ) {
-                                    Text("取消", fontSize = 12.sp)
-                                }
+                            FilledTonalButton(
+                                onClick = { isHudCollapsed = true },
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier
+                                    .height(26.dp)
+                                    .testTag("collapse_hud_btn")
+                            ) {
+                                Icon(imageVector = Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("收起面板 (不挡网格)", fontSize = 10.sp)
                             }
                         }
-                    }
-                }
-            }
 
-            // Model Identity Detection & Fingerprint Strip
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 6.dp)
-                    .testTag("model_detection_strip"),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = ModelABlue.copy(alpha = 0.15f)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Model Identity Badges
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(ModelABlue))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = modelA.rawName,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = ModelABlue,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                Surface(shape = RoundedCornerShape(4.dp), color = ModelABlue.copy(alpha = 0.15f)) {
+                                    Text(
+                                        text = modelA.rawName,
+                                        fontSize = 10.sp,
+                                        color = ModelABlue,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Text("⚔️", fontSize = 9.sp)
+                                Surface(shape = RoundedCornerShape(4.dp), color = ModelBPink.copy(alpha = 0.15f)) {
+                                    Text(
+                                        text = modelB.rawName,
+                                        fontSize = 10.sp,
+                                        color = ModelBPink,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
-                        }
 
-                        Text("⚔️", fontSize = 10.sp)
-
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = ModelBPink.copy(alpha = 0.15f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(ModelBPink))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = modelB.rawName,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = ModelBPink,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-
-                    FilledTonalButton(
-                        onClick = { viewModel.probeModelIdentities() },
-                        shape = RoundedCornerShape(6.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        modifier = Modifier
-                            .height(28.dp)
-                            .testTag("probe_model_identity_btn")
-                    ) {
-                        Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(13.dp))
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = if (modelA.isRevealed || modelB.isRevealed) "重探" else "探针识模",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-
-            // Main Control & Telemetry Bar
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("runner_control_panel"),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
-                ),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
+                            FilledTonalButton(
+                                onClick = { viewModel.probeModelIdentities() },
                                 shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                modifier = Modifier.height(24.dp)
                             ) {
-                                Text(
-                                    text = "第 $currentTurn / ${rules.maxRounds} 轮",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(6.dp))
-
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer
-                            ) {
-                                Text(
-                                    text = rules.sequencingMode.displayName,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
+                                Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(11.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("探针识模", fontSize = 9.sp)
                             }
                         }
 
-                        Text(
-                            text = if (status == AutomationStatus.STREAMING) "⚡ 正在生成 (${telemetry.charsDetected} 字)" else "监测字符: ${telemetry.charsDetected}",
-                            fontSize = 11.sp,
-                            fontWeight = if (status == AutomationStatus.STREAMING) FontWeight.Bold else FontWeight.Normal,
-                            color = if (status == AutomationStatus.STREAMING) StatusSky else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // New battle button
-                        FilledTonalButton(
-                            onClick = { viewModel.startNewBattle() },
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            modifier = Modifier.testTag("runner_new_battle_btn")
+                        // Action Buttons Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(imageVector = Icons.Default.Add, contentDescription = "新对战", modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text("新对战", fontSize = 12.sp)
-                        }
+                            // Account Switch & Autofill
+                            OutlinedButton(
+                                onClick = onOpenAccountSheet,
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(0.9f)
+                                    .height(34.dp)
+                                    .testTag("manage_accounts_btn")
+                            ) {
+                                Icon(imageVector = Icons.Default.Key, contentDescription = null, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("账号登录", fontSize = 11.sp)
+                            }
 
-                        Button(
-                            onClick = { showQuickInjectSheet = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("quick_inject_prompt_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.Bolt, contentDescription = "注入预设词", modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("注入预设词", fontSize = 12.sp, maxLines = 1)
-                        }
+                            // Start New Battle
+                            FilledTonalButton(
+                                onClick = { viewModel.startNewBattle() },
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(0.9f)
+                                    .height(34.dp)
+                                    .testTag("runner_new_battle_btn")
+                            ) {
+                                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("开启对战", fontSize = 11.sp)
+                            }
 
-                        FilledTonalButton(
-                            onClick = { viewModel.triggerImmediateSend() },
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            modifier = Modifier.testTag("next_prompt_button")
-                        ) {
-                            Icon(imageVector = Icons.Default.Forward, contentDescription = "发下条", modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text("发下条", fontSize = 12.sp)
-                        }
+                            // Quick Prompt Injection
+                            Button(
+                                onClick = { showQuickInjectSheet = true },
+                                modifier = Modifier
+                                    .weight(1.2f)
+                                    .height(34.dp)
+                                    .testTag("quick_inject_prompt_button"),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("注入预设词", fontSize = 11.sp, maxLines = 1)
+                            }
 
-                        IconButton(
-                            onClick = {
-                                webViewInstance?.reload()
-                            },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .testTag("reload_webview_button")
-                        ) {
-                            Icon(imageVector = Icons.Default.Refresh, contentDescription = "刷新", modifier = Modifier.size(18.dp))
+                            // Send Next Prompt
+                            FilledTonalButton(
+                                onClick = { viewModel.triggerImmediateSend() },
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(0.9f)
+                                    .height(34.dp)
+                                    .testTag("next_prompt_button")
+                            ) {
+                                Icon(imageVector = Icons.Default.Forward, contentDescription = null, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("发下条", fontSize = 11.sp)
+                            }
                         }
                     }
                 }

@@ -130,3 +130,15 @@ data class ModelIdentityInfo(
     }
 }
 
+@Entity(tableName = "managed_accounts")
+data class ManagedAccountEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val email: String,
+    val password: String,
+    val label: String,
+    val isActive: Boolean = false,
+    val notes: String = "",
+    val createdAt: Long = System.currentTimeMillis()
+)
+

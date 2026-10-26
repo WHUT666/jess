@@ -78,29 +78,42 @@ fun MainAppScreen(viewModel: ArenaPilotViewModel) {
         }
     }
 
-    BackHandler(enabled = selectedTab != 0) {
-        selectedTab = 0
+    var isImmersiveFullscreen by rememberSaveable { mutableStateOf(false) }
+
+    BackHandler(enabled = selectedTab != 0 || isImmersiveFullscreen) {
+        if (isImmersiveFullscreen) {
+            isImmersiveFullscreen = false
+        } else {
+            selectedTab = 0
+        }
     }
 
+    val hideBars = isImmersiveFullscreen && selectedTab == 0
+
     Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
+        contentWindowInsets = if (hideBars) WindowInsets(0, 0, 0, 0) else WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            ArenaTopBar(
-                status = status,
-                countdownSeconds = countdown,
-                isAutoSendEnabled = rules.isAutoSendEnabled,
-                isLoggedIn = accountInfo.isLoggedIn,
-                onToggleAutoSend = { viewModel.toggleAutoSend() },
-                onResetSession = { viewModel.resetSession() },
-                onOpenAccount = { showAccountSheet = true }
-            )
+            if (!hideBars) {
+                ArenaTopBar(
+                    status = status,
+                    countdownSeconds = countdown,
+                    isAutoSendEnabled = rules.isAutoSendEnabled,
+                    isLoggedIn = accountInfo.isLoggedIn,
+                    onToggleAutoSend = { viewModel.toggleAutoSend() },
+                    onResetSession = { viewModel.resetSession() },
+                    onOpenAccount = { showAccountSheet = true },
+                    onToggleFullscreen = { isImmersiveFullscreen = !isImmersiveFullscreen }
+                )
+            }
         },
         bottomBar = {
-            ArenaBottomNav(
-                selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it }
-            )
+            if (!hideBars) {
+                ArenaBottomNav(
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it }
+                )
+            }
         }
     ) { innerPadding ->
         Box(
@@ -111,7 +124,10 @@ fun MainAppScreen(viewModel: ArenaPilotViewModel) {
             when (selectedTab) {
                 0 -> ArenaRunnerScreen(
                     viewModel = viewModel,
-                    navigateToUrl = pendingNavigateUrl
+                    navigateToUrl = pendingNavigateUrl,
+                    isImmersiveFullscreen = isImmersiveFullscreen,
+                    onToggleImmersiveFullscreen = { isImmersiveFullscreen = !isImmersiveFullscreen },
+                    onOpenAccountSheet = { showAccountSheet = true }
                 )
                 1 -> ConversationsScreen(
                     viewModel = viewModel,

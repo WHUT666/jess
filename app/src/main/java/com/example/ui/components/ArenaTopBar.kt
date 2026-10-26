@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -52,7 +53,8 @@ fun ArenaTopBar(
     isLoggedIn: Boolean,
     onToggleAutoSend: () -> Unit,
     onResetSession: () -> Unit,
-    onOpenAccount: () -> Unit
+    onOpenAccount: () -> Unit,
+    onToggleFullscreen: () -> Unit = {}
 ) {
     val statusColor = when (status) {
         AutomationStatus.STREAMING -> StatusSky
@@ -159,6 +161,17 @@ fun ArenaTopBar(
                     imageVector = if (isAutoSendEnabled) Icons.Default.PlayArrow else Icons.Default.Pause,
                     contentDescription = if (isAutoSendEnabled) "Pause Auto-Pilot" else "Resume Auto-Pilot",
                     tint = if (isAutoSendEnabled) StatusEmerald else Color.Gray
+                )
+            }
+
+            IconButton(
+                onClick = onToggleFullscreen,
+                modifier = Modifier.testTag("topbar_fullscreen_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Fullscreen,
+                    contentDescription = "全屏沉浸",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 

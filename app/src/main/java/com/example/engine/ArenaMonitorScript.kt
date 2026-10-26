@@ -358,10 +358,10 @@ object ArenaMonitorScript {
     };
 
     window.ArenaPilotBridge_newBattle = function() {
-        var buttons = document.querySelectorAll('button');
+        var buttons = document.querySelectorAll('button, a[role="button"]');
         for (var i = 0; i < buttons.length; i++) {
             var txt = (buttons[i].innerText || '').toLowerCase();
-            if (txt.indexOf('clear') !== -1 || txt.indexOf('new battle') !== -1 || txt.indexOf('新对话') !== -1) {
+            if (txt.indexOf('clear') !== -1 || txt.indexOf('new battle') !== -1 || txt.indexOf('新对话') !== -1 || txt.indexOf('开启') !== -1) {
                 buttons[i].click();
                 lastReportedModelA = '';
                 lastReportedModelB = '';
@@ -369,6 +369,74 @@ object ArenaMonitorScript {
             }
         }
         return false;
+    };
+
+    // 智能自动填密登录：支持 Microsoft Outlook 登录表单、Arena 原生登录、通用 OAuth
+    window.ArenaPilotBridge_autoFillLogin = function(email, password) {
+        try {
+            var filled = false;
+
+            // 1. 检查 Microsoft 登录表单 (login.live.com / login.microsoftonline.com)
+            var msEmail = document.querySelector('input[name="loginfmt"], input[type="email"], #i0116');
+            var msPass = document.querySelector('input[name="passwd"], input[type="password"], #i0118');
+
+            if (msEmail && !msPass) {
+                msEmail.value = email;
+                msEmail.dispatchEvent(new Event('input', { bubbles: true }));
+                msEmail.dispatchEvent(new Event('change', { bubbles: true }));
+                filled = true;
+                setTimeout(function() {
+                    var nextBtn = document.querySelector('#idSIButton9, input[type="submit"], button[type="submit"]');
+                    if (nextBtn) nextBtn.click();
+                }, 400);
+            } else if (msPass) {
+                msPass.value = password;
+                msPass.dispatchEvent(new Event('input', { bubbles: true }));
+                msPass.dispatchEvent(new Event('change', { bubbles: true }));
+                filled = true;
+                setTimeout(function() {
+                    var submitBtn = document.querySelector('#idSIButton9, input[type="submit"], button[type="submit"]');
+                    if (submitBtn) submitBtn.click();
+                }, 400);
+            }
+
+            // 2. 通用登录框检测
+            if (!filled) {
+                var emailInput = document.querySelector('input[type="email"], input[name*="email"], input[placeholder*="email" i], input[placeholder*="邮箱" i], input[name*="user"], input[id*="email"]');
+                var passInput = document.querySelector('input[type="password"], input[name*="pass"], input[placeholder*="pass" i], input[placeholder*="密码" i]');
+
+                if (emailInput) {
+                    emailInput.value = email;
+                    emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    emailInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    filled = true;
+                }
+                if (passInput) {
+                    passInput.value = password;
+                    passInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    passInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    filled = true;
+                }
+            }
+
+            // 3. 如果当前处于 Arena 首页且未打开登录弹窗，尝试点击登录按钮
+            if (!filled) {
+                var loginButtons = document.querySelectorAll('button, a');
+                for (var j = 0; j < loginButtons.length; j++) {
+                    var b = loginButtons[j];
+                    var t = (b.innerText || '').trim().toLowerCase();
+                    if (t === 'sign in' || t === 'log in' || t === '登录' || t.indexOf('login') !== -1) {
+                        b.click();
+                        filled = true;
+                        break;
+                    }
+                }
+            }
+
+            return filled;
+        } catch (_e) {
+            return false;
+        }
     };
 
     checkAccountStatus();
