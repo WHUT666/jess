@@ -6,9 +6,9 @@ import java.util.UUID
 object ArenaModelProbeEngine {
 
     /**
-     * 生成带随机抗缓存指纹 (Canary Fingerprint) 的探针提示词
-     * LMSYS Arena 对完全相同的 Prompt 会有结果缓存或固定分配，
-     * 附加高熵随机指纹 Nonce 可强制触发后端实时配对，并诱导模型自报架构。
+     * 生成带随机抗缓存与防封号指纹 (Anti-Ban & Anti-Cache Fingerprint) 的探针提示词
+     * LMSYS Arena 对完全相同的 Prompt 会有系统级重复检测（容易导致频繁限制甚至账号封禁）
+     * 结合零宽隐形编码、随机高熵会话 Salt 以及探针指示，确保底层哈希百分之百唯一且防封号。
      */
     fun generateFingerprintedProbe(
         basePrompt: String,
@@ -27,8 +27,13 @@ object ArenaModelProbeEngine {
             (附带探测指令：请在深入解答正文前，简要以一行声明你的模型版本系列与核心设计定位)
         """.trimIndent()
 
-        val fullPrompt = "${basePrompt.trim()}\n$probeSuffix"
-        return Pair(fullPrompt, fingerprint)
+        val promptWithSuffix = "${basePrompt.trim()}\n$probeSuffix"
+        // 核心防封逻辑：注入零宽不可见字符序列与随机指纹
+        val hardenedPrompt = AntiBanFingerprintEngine.injectFingerprint(
+            originalPrompt = promptWithSuffix,
+            mode = AntiBanFingerprintEngine.FingerprintMode.HYBRID_HARDENED
+        )
+        return Pair(hardenedPrompt, fingerprint)
     }
 
     /**

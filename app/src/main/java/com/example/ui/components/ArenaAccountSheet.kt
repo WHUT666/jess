@@ -95,6 +95,8 @@ fun ArenaAccountSheet(
     val accountInfo by viewModel.accountInfo.collectAsState()
     val rules by viewModel.rules.collectAsState()
     val isCheckingAccounts by viewModel.isCheckingAccounts.collectAsState()
+    val isProbingLogin by viewModel.isProbingLogin.collectAsState()
+    val activeProbeResult by viewModel.activeProbeResult.collectAsState()
     val managedAccounts by viewModel.allManagedAccounts.collectAsState(initial = emptyList())
 
     var showAddAccountDialog by remember { mutableStateOf(false) }
@@ -303,12 +305,14 @@ fun ArenaAccountSheet(
                                         Spacer(modifier = Modifier.width(4.dp))
                                     }
 
-                                    // Status Badge
-                                    val (stColor, stText) = when (acc.status) {
-                                        "VALID" -> Pair(StatusEmerald, "有效")
-                                        "INVALID" -> Pair(StatusRose, "异常")
-                                        "RATE_LIMITED" -> Pair(StatusAmber, "限流")
-                                        "CHECKING" -> Pair(StatusSky, "检测中")
+                                    // Status Badge (包含 Arena 官方封禁/禁用检测、人机验证与凭证状态)
+                                    val (stColor, stText) = when {
+                                        acc.isBannedOnArena || acc.status == "BANNED" -> Pair(StatusRose, "Arena已被封禁")
+                                        acc.status == "VALID" -> Pair(StatusEmerald, "正常可用 (未封禁)")
+                                        acc.status == "CAPTCHA_REQUIRED" -> Pair(StatusAmber, "需网页过人机")
+                                        acc.status == "RATE_LIMITED" -> Pair(StatusAmber, "请求被限流")
+                                        acc.status == "INVALID" -> Pair(StatusRose, "凭据异常")
+                                        acc.status == "CHECKING" -> Pair(StatusSky, "探测中...")
                                         else -> Pair(MaterialTheme.colorScheme.onSurfaceVariant, "未检测")
                                     }
                                     Surface(
@@ -413,59 +417,89 @@ fun ArenaAccountSheet(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // One-tap Action Buttons (Check, Autofill, Clean Switch)
-                            Row(
+                            // One-tap Action Buttons (Check, Probe API Login, Autofill, Clean Switch)
+                            Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                FilledTonalButton(
-                                    onClick = { viewModel.verifySingleAccount(acc) },
-                                    modifier = Modifier
-                                        .height(34.dp)
-                                        .testTag("verify_account_${acc.id}"),
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Icon(imageVector = Icons.Default.HourglassTop, contentDescription = null, modifier = Modifier.size(12.dp))
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    Text("检测", fontSize = 11.sp)
+                                    FilledTonalButton(
+                                        onClick = { viewModel.verifySingleAccount(acc) },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(34.dp)
+                                            .testTag("verify_account_${acc.id}"),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.HourglassTop, contentDescription = null, modifier = Modifier.size(12.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("有效性检测", fontSize = 11.sp)
+                                    }
+
+                                    FilledTonalButton(
+                                        onClick = { viewModel.probeArenaLogin(acc) },
+                                        enabled = !isProbingLogin,
+                                        modifier = Modifier
+                                            .weight(1.1f)
+                                            .height(34.dp)
+                                            .testTag("probe_login_account_${acc.id}"),
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                        ),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Terminal, contentDescription = null, modifier = Modifier.size(12.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(if (isProbingLogin) "探测中..." else "探测直登接口", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    }
                                 }
 
-                                Button(
-                                    onClick = {
-                                        viewModel.switchAccount(acc, clearCookies = false)
-                                        viewModel.autoFillCurrentPage(acc.email, acc.password)
-                                        onDismiss()
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(34.dp)
-                                        .testTag("fill_login_account_${acc.id}"),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Icon(imageVector = Icons.Default.Login, contentDescription = null, modifier = Modifier.size(13.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("一键填密", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
+                                    Button(
+                                        onClick = {
+                                            viewModel.switchAccount(acc, clearCookies = false)
+                                            viewModel.autoFillCurrentPage(acc.email, acc.password)
+                                            onDismiss()
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(34.dp)
+                                            .testTag("fill_login_account_${acc.id}"),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("一键填密直登", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
 
-                                OutlinedButton(
-                                    onClick = {
-                                        viewModel.switchAccount(acc, clearCookies = true)
-                                        onDismiss()
-                                        onOpenArenaLoginUrl()
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(34.dp)
-                                        .testTag("switch_clean_account_${acc.id}"),
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Icon(imageVector = Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(12.dp))
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    Text("清除重登", fontSize = 11.sp)
+                                    OutlinedButton(
+                                        onClick = {
+                                            viewModel.switchAccount(acc, clearCookies = true)
+                                            onDismiss()
+                                            onOpenArenaLoginUrl()
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(34.dp)
+                                            .testTag("switch_clean_account_${acc.id}"),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(12.dp))
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text("清除重登", fontSize = 11.sp)
+                                    }
                                 }
                             }
                         }
@@ -619,4 +653,155 @@ fun ArenaAccountSheet(
             }
         )
     }
+
+    // Arena 登录接口直登与封禁探测诊断弹窗
+    activeProbeResult?.let { result ->
+        ArenaLoginProbeDialog(
+            result = result,
+            onDismiss = { viewModel.dismissProbeResult() },
+            onAutoFill = {
+                viewModel.autoFillCurrentPage(it.first, it.second)
+                onDismiss()
+            }
+        )
+    }
 }
+
+@Composable
+fun ArenaLoginProbeDialog(
+    result: ArenaLoginProbeResult,
+    onDismiss: () -> Unit,
+    onAutoFill: (Pair<String, String>) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = when {
+                        result.isBannedOnArena -> Icons.Default.Block
+                        result.success -> Icons.Default.CheckCircle
+                        result.isCloudflareProtected -> Icons.Default.Warning
+                        else -> Icons.Default.Error
+                    },
+                    contentDescription = null,
+                    tint = when {
+                        result.isBannedOnArena -> StatusRose
+                        result.success -> StatusEmerald
+                        result.isCloudflareProtected -> StatusAmber
+                        else -> StatusRose
+                    },
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Arena 接口直登与封禁探测",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Status Box
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = when {
+                        result.isBannedOnArena -> StatusRose.copy(alpha = 0.12f)
+                        result.success -> StatusEmerald.copy(alpha = 0.12f)
+                        result.isCloudflareProtected -> StatusAmber.copy(alpha = 0.12f)
+                        else -> MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = result.statusSummary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = when {
+                                result.isBannedOnArena -> StatusRose
+                                result.success -> StatusEmerald
+                                result.isCloudflareProtected -> StatusAmber
+                                else -> MaterialTheme.colorScheme.onSurface
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = result.recommendedAction,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Diagnostics Grid
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    DiagnosticRow("Arena 官方封禁状态", if (result.isBannedOnArena) "已被封禁/禁用 (Suspended)" else "正常 (未被封禁)", if (result.isBannedOnArena) StatusRose else StatusEmerald)
+                    DiagnosticRow("接口直连登录可能", if (result.canDirectApiLogin) "允许直接接口登录" else "受 Cloudflare/CSRF 拦截", if (result.canDirectApiLogin) StatusEmerald else StatusAmber)
+                    DiagnosticRow("Cloudflare 盾防御", if (result.isCloudflareProtected) "已激活 Turnstile 质询" else "未拦截直接访问", if (result.isCloudflareProtected) StatusAmber else StatusEmerald)
+                    DiagnosticRow("CSRF 凭证获取", if (result.csrfTokenFound) "成功截获 Token" else "未返回", if (result.csrfTokenFound) StatusEmerald else StatusRose)
+                    if (result.availableProviders.isNotEmpty()) {
+                        DiagnosticRow("支持的认证体系", result.availableProviders.joinToString(", "), StatusSky)
+                    }
+                    DiagnosticRow("HTTP 状态码", "${result.httpStatusCode}", MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                // Logs Output
+                Text(text = "探测流水日志:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.inverseSurface,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .height(130.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        result.detailLogs.forEach { logLine ->
+                            Text(
+                                text = logLine,
+                                color = MaterialTheme.colorScheme.inverseOnSurface,
+                                fontSize = 10.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DiagnosticRow(label: String, value: String, valueColor: androidx.compose.ui.graphics.Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text = value, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = valueColor)
+    }
+}
+

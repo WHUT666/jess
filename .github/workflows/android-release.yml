@@ -105,10 +105,18 @@ jobs:
           ./gradlew testDebugUnitTest --no-daemon
 
       - name: Build Debug & Release APKs
+        env:
+          STORE_PASSWORD: ${{ env.STORE_PASSWORD || 'android' }}
+          KEY_PASSWORD: ${{ env.KEY_PASSWORD || 'android' }}
+          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH || format('{0}/my-upload-key.jks', github.workspace) }}
         run: |
           ./gradlew assembleDebug assembleRelease --no-daemon
 
       - name: Build Android App Bundle (AAB)
+        env:
+          STORE_PASSWORD: ${{ env.STORE_PASSWORD || 'android' }}
+          KEY_PASSWORD: ${{ env.KEY_PASSWORD || 'android' }}
+          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH || format('{0}/my-upload-key.jks', github.workspace) }}
         run: |
           ./gradlew bundleRelease --no-daemon
 
@@ -120,14 +128,21 @@ jobs:
           # Copy APKs
           if [ -f app/build/outputs/apk/release/app-release.apk ]; then
             cp app/build/outputs/apk/release/app-release.apk release-output/ArenaPilot-v1.0.0-release.apk
+          else
+            find app/build/outputs/apk/release/ -name "*.apk" -exec cp {} release-output/ArenaPilot-v1.0.0-release.apk \; 2>/dev/null || true
           fi
+
           if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
             cp app/build/outputs/apk/debug/app-debug.apk release-output/ArenaPilot-v1.0.0-debug.apk
+          else
+            find app/build/outputs/apk/debug/ -name "*.apk" -exec cp {} release-output/ArenaPilot-v1.0.0-debug.apk \; 2>/dev/null || true
           fi
 
           # Copy AAB
           if [ -f app/build/outputs/bundle/release/app-release.aab ]; then
             cp app/build/outputs/bundle/release/app-release.aab release-output/ArenaPilot-v1.0.0-release.aab
+          else
+            find app/build/outputs/bundle/release/ -name "*.aab" -exec cp {} release-output/ArenaPilot-v1.0.0-release.aab \; 2>/dev/null || true
           fi
 
           echo "Artifacts staged:"

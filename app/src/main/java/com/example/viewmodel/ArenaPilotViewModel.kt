@@ -368,7 +368,7 @@ class ArenaPilotViewModel(
             return
         }
 
-        val promptToSend = if (overridePrompt != null) {
+        val basePromptText = if (overridePrompt != null) {
             overridePrompt
         } else {
             val mode = rules.value.sequencingMode
@@ -397,6 +397,13 @@ class ArenaPilotViewModel(
             _currentPromptIndex.value = index + 1
             repository.incrementPromptUsage(entity.id)
             entity.content
+        }
+
+        // 防封号核心逻辑：若开启防封号指纹，注入高熵零宽隐形编码与随机会话盐，防止系统检测到重复问题导致账号封禁
+        val promptToSend = if (rules.value.antiBanFingerprintEnabled) {
+            com.example.engine.AntiBanFingerprintEngine.injectFingerprint(basePromptText)
+        } else {
+            basePromptText
         }
 
         _status.value = AutomationStatus.SENDING

@@ -26,7 +26,8 @@ data class AutomationRule(
     val soundVibrationEnabled: Boolean = true,
     val pauseOnStopKeywords: Boolean = true,
     val stopKeywords: String = "抱歉, 无法回答, 触发安全, I cannot, As an AI language model",
-    val targetUrl: String = "https://lmarena.ai/"
+    val targetUrl: String = "https://lmarena.ai/",
+    val antiBanFingerprintEnabled: Boolean = true
 )
 
 enum class SequencingMode(val displayName: String, val description: String) {
