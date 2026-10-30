@@ -1,91 +1,32 @@
-# ArenaPilot - LMSYS Arena 对战实时监控与智能自动引导系统
+# ArenaPilot
 
-[![Android CI/CD - Build & Release](https://github.com/OWNER/REPO/actions/workflows/android-release.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/android-release.yml)
-[![Version](https://img.shields.io/badge/version-v1.0.0-blue.svg)](https://github.com/OWNER/REPO/releases/tag/v1.0.0)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+Android 客户端：**手动访问 Arena 官方 Agent 页面**。当前工作区为 `WHUT666/jess`，历史版本 v1.0.0 含对战自动化代码；v1.0.1 以安全、真实状态和键盘可用性为修复目标。
 
-**ArenaPilot** 是一款专为 [LMSYS Chatbot Arena](https://lmarena.ai/) 设计的专业级 Android 客户端自动化与监控工具。
-告别手动守株待兔与重复复制粘贴，通过实时 DOM 监听、智能流式终止识别与精准静默倒计时，全自动注入多维度预设提示词，引导模型进行高强度多轮对抗评测与指纹盲测剖析。
+## 本版行为与明确限制
 
----
+- 首页访问 `https://arena.ai/agent`；登录按钮一键进入官方页面或续用 **同一 WebView** 的已登录会话。首次 Google / 邮箱验证必须由本人按官网完成，应用不会以猜测的接口代替认证。
+- Google 登录若在内嵌 WebView 中受限制，点「在系统浏览器打开 Agent」并在浏览器完成登录和对话。系统浏览器与 WebView 的登录态**不共享**，不会伪造 Cookie 同步。
+- 打字时隐藏顶部、底部栏；WebView 布局按 IME 调整，避免浮层挡住输入框。内嵌页面支持系统文件选择器；外部浏览器也可用于上传。
+- 旧版本地对战档案只读可见；已有提示词可手动复制、也能在本机新建（不会自动发送）。Agent 会话历史由 Arena 官方网站管理。本版不采集新对话内容、不给旧记录填充演示数据。
+- Arena Agent 模式官方不公布所用协调模型。回答自述或网页目录不是可靠身份；本版显示 **未公开**，不推测具体型号；HTTP 403、一般 Cookie 或 429 也不能证明账号封禁。
+- v1.0.0 的自动提示注入、批量抽模、指纹规避、明文密码填入、猜测登录 API 及无障碍自动化入口已停用；保留已有设备数据，**不会自动删除或读取旧账号密码**。
 
-## 🌟 核心特性 (100% 真实可用)
+## 安全提醒
 
-1. **真实 LMSYS 接入与凭证管理**
-   - 100% 直连 `https://lmarena.ai/` 生产环境。
-   - 内置现代 Pixel 移动端 User-Agent，支持 Google 账号登录、OAuth 回调与 Cookie 完整同步。
-   - 支持跨会话凭证持久化与账号信息实时检查。
+旧版公开源码曾包含疑似账号凭据。请所有相关账号所有者自行更换密码；仅从当前分支删除文字**不能清除 Git 历史和旧 tag**。请勿提交 `.env`、Keystore、Cookie、口令或会话令牌。升级不清空旧数据库；新的构建禁用应用数据备份，以降低再次泄露风险。
 
-2. **双引擎实时监控与静默停顿捕获**
-   - **DOM MutationObserver 注入探针**：毫秒级监听两个模型的流式输出状态，智能识别 Markdown 渲染完成节点与发送按钮禁用状态。
-   - **系统级无障碍辅助服务 (`ArenaAccessibilityService`)**：支持后台/分屏/外部 Chrome 浏览器运行时监控。
+## 运行与测试
 
-3. **智能预设词库与多模式引导调度**
-   - 内置包含“深度辩驳”、“极限边界”、“推理逻辑”、“指令遵循”等维度的开箱即用提示词库。
-   - 4 种调度策略：
-     - **顺序遍历**：按次序轮询发送。
-     - **随机探索**：随机抽取，提高盲测样本多样性。
-     - **智能深度**：优先调用高难度/辩论性质的深度 Prompt。
-     - **单次遍历**：轮完即停。
+在具备 JDK 21、Android SDK 与 Gradle 依赖的环境中：
 
-4. **模型身份探测器 (Blind Test Fingerprint Prober)**
-   - 注入精心设计的元提示词，诱导未知模型输出自我架构认同与知识截止期特征。
-   - 配合 LMSYS 投票后官方揭牌逻辑，自动提取并记录 Model A 和 Model B 的真实模型型号（如 GPT-4o、Claude 3.5 Sonnet、Gemini 1.5 Pro、DeepSeek-V2 等）。
-
-5. **本地对战档案沉淀与回放 (Room DB)**
-   - 自动沉淀每轮对决完整的输入、输出、字数吞吐量、响应耗时、最终揭晓模型与投票胜负。
-   - 支持一键导出、文本复制、标题重命名与对战复盘。
-
-6. **安全保护与熔断机制**
-   - 最大轮次限制 (默认 10 轮)。
-   - 自定义停止关键词检测 (如 `error`, `quota`, `token limit`, `overloaded`)，触发即刻暂停。
-
----
-
-## 🛠️ GitHub CI/CD 与自动化打包发布
-
-本项目已配置完善的 GitHub Actions 流水线 (`.github/workflows/android-release.yml`)。
-
-### 触发打包与自动发布第一个版本 (v1.0.0)
-
-#### 方法 1：推送 Git Tag (推荐)
-在本地终端或提交中打上版本 tag 并推送到 GitHub：
-```bash
-git tag -a v1.0.0 -m "Release v1.0.0 - ArenaPilot Initial Release"
-git push origin v1.0.0
+```sh
+./gradlew testDebugUnitTest assembleDebug
 ```
-GitHub Actions 会自动触发构建：
-1. 运行所有 Robolectric 和单元测试；
-2. 自动配置签名并打包生成：
-   - `ArenaPilot-v1.0.0-release.apk` (生产发布包)
-   - `ArenaPilot-v1.0.0-debug.apk` (调试包)
-   - `ArenaPilot-v1.0.0-release.aab` (Google Play 格式)
-3. 自动在 GitHub Releases 创建 `v1.0.0` 发布页面并上传全部 APK/AAB 附件。
 
-#### 方法 2：在 GitHub 仓库网页端一键手动触发
-1. 打开 GitHub 仓库页面，点击 **Actions** 标签；
-2. 在左侧选择 **Android CI/CD - Build & Release**；
-3. 点击 **Run workflow** 下拉按钮；
-4. 输入版本号（默认为 `v1.0.0`），点击 **Run workflow** 即可启动全自动打包并发布 Release。
+Debug APK：`app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的每次测试成功只上传 **debug 工作流产物**，不将其冒充可稳定升级的发布 APK。
 
----
+## 正式发布的签名门禁
 
-## 📱 本地构建指南
+`v1.0.1` 发布须使用 **与 v1.0.0 release APK 相同的私钥**，并设置仓库 Actions Secrets：`KEYSTORE_BASE64`、`STORE_PASSWORD`、`KEY_PASSWORD`。工作流已钉住从公开的 v1.0.0 APK 核验出的签名证书 SHA-256：`91efb3cd21499066ef57b1208109e61c9ebfc8b11514e017209db4c20db10e9e`。密钥、密码只能由管理员通过 GitHub 自行配置，不能提供给聊天助手。缺任何材料、指纹不同、测试或构建失败时流水线必须阻止正式发布。仓库目前没有配置 Actions 签名 Secrets（计数为 0），旧 APK 的证书生成时间与发布时间相近；无法确认原始私钥是否留存。如私钥丢失，**无法覆盖升级**；此时请先解决签名连续性，不要随意打 tag。
 
-```bash
-# 克隆代码
-git clone https://github.com/YOUR_USERNAME/ArenaPilot.git
-cd ArenaPilot
-
-# 编译 Debug APK
-./gradlew assembleDebug
-
-# 运行单元测试
-./gradlew testDebugUnitTest
-```
-产物位置：`app/build/outputs/apk/debug/app-debug.apk`
-
----
-
-## 📄 开源许可
-Apache License 2.0
+官方资料：[Agent 模式](https://help.arena.ai/articles/5432423882-how-to-use-agent-mode)、[登录方式](https://help.arena.ai/articles/7258407731-arena-how-to-create-an-account)、[服务条款](https://help.arena.ai/articles/5629909088-terms-of-use)。
