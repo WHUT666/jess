@@ -1,6 +1,6 @@
 {
   "name": "ArenaPilot",
-  "description": "实时监控 arena.ai 对战对话流，检测回复停顿时自动发送预设提示词引导深入探讨的自动化伴侣",
+  "description": "手动使用 Arena 官方 Agent 页面、管理本地提示词并查看旧版档案的 Android 客户端；不自动发词，不推断未公开模型或账号状态。",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
