@@ -27,6 +27,6 @@ Debug APK：`app/build/outputs/apk/debug/app-debug.apk`。GitHub Actions 的每�
 
 ## 正式发布的签名门禁
 
-`v1.0.1` 发布须使用 **与 v1.0.0 release APK 相同的私钥**，并设置仓库 Actions Secrets：`KEYSTORE_BASE64`、`STORE_PASSWORD`、`KEY_PASSWORD`；Actions Variable `RELEASE_CERT_SHA256` 需填入旧 APK 签名证书的 SHA-256 指纹。密钥、密码只能由管理员通过 GitHub 自行配置，不能提供给聊天助手。缺任何材料、指纹不同、测试或构建失败时流水线必须阻止正式发布。旧版若使用 CI 随机生成后未留存的签名密钥，**无法保证覆盖升级**；此时请先解决签名连续性，不要随意打 tag。
+`v1.0.1` 发布须使用 **与 v1.0.0 release APK 相同的私钥**，并设置仓库 Actions Secrets：`KEYSTORE_BASE64`、`STORE_PASSWORD`、`KEY_PASSWORD`。工作流已钉住从公开的 v1.0.0 APK 核验出的签名证书 SHA-256：`91efb3cd21499066ef57b1208109e61c9ebfc8b11514e017209db4c20db10e9e`。密钥、密码只能由管理员通过 GitHub 自行配置，不能提供给聊天助手。缺任何材料、指纹不同、测试或构建失败时流水线必须阻止正式发布。仓库目前没有配置 Actions 签名 Secrets（计数为 0），旧 APK 的证书生成时间与发布时间相近；无法确认原始私钥是否留存。如私钥丢失，**无法覆盖升级**；此时请先解决签名连续性，不要随意打 tag。
 
 官方资料：[Agent 模式](https://help.arena.ai/articles/5432423882-how-to-use-agent-mode)、[登录方式](https://help.arena.ai/articles/7258407731-arena-how-to-create-an-account)、[服务条款](https://help.arena.ai/articles/5629909088-terms-of-use)。

@@ -37,7 +37,7 @@ fun LegacyHistoryScreen() {
     val selectedFlow = remember(dao, selectedId) {
         selectedId?.let(dao::getSessionWithTurnsFlow)
     }
-    val selected by selectedFlow?.collectAsState(initial = null) ?: remember { mutableStateOf(null) }
+    val selected = selectedFlow?.collectAsState(initial = null)?.value
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("旧版对战记录（本地只读）")
@@ -45,7 +45,7 @@ fun LegacyHistoryScreen() {
         if (selectedId != null) {
             TextButton(onClick = { selectedId = null }) { Text("返回列表") }
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (selectedId == null) {
                 if (sessions.isEmpty()) item { Text("没有旧记录。不会为新用户生成演示对话。") }
                 items(sessions, key = { it.id }) { session ->

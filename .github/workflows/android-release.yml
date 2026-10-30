@@ -48,7 +48,7 @@ jobs:
       KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
       STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
       KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-      EXPECTED_SIGNER_SHA256: ${{ vars.RELEASE_CERT_SHA256 }}
+      EXPECTED_SIGNER_SHA256: 91efb3cd21499066ef57b1208109e61c9ebfc8b11514e017209db4c20db10e9e
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -68,7 +68,7 @@ jobs:
             exit 1
           fi
           if [[ ! "$EXPECTED_SIGNER_SHA256" =~ ^([[:xdigit:]]{2}:?){32}$ ]]; then
-            echo 'BLOCKED: set RELEASE_CERT_SHA256 to the v1.0.0 APK signer fingerprint.'
+            echo 'BLOCKED: pinned v1.0.0 signer fingerprint is malformed.'
             exit 1
           fi
           keystore_path="$RUNNER_TEMP/arenapilot-release.jks"
@@ -101,6 +101,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ArenaPilot ${{ github.ref_name }}
-          body_path: RELEASE_NOTES_v1.0.1.md
+          body_path: RELEASE_NOTES_${{ github.ref_name }}.md
           files: release-output/*
           fail_on_unmatched_files: true

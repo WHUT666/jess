@@ -28,6 +28,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.example.data.db.AppDatabase
 import com.example.data.model.PromptEntity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -73,17 +74,23 @@ fun ManualPromptScreen(onNotice: (String) -> Unit) {
                         val savedTitle = title.trim()
                         val savedContent = content.trim()
                         scope.launch {
-                            withContext(Dispatchers.IO) {
-                                dao.insert(PromptEntity(
-                                    title = savedTitle,
-                                    content = savedContent,
-                                    category = "手动",
-                                    orderIndex = dao.count() + 1
-                                ))
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    dao.insert(PromptEntity(
+                                        title = savedTitle,
+                                        content = savedContent,
+                                        category = "手动",
+                                        orderIndex = dao.count() + 1
+                                    ))
+                                }
+                                title = ""
+                                content = ""
+                                onNotice("已保存在本机，未向 Arena 发送。")
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                onNotice("本地保存失败；不会发送到 Arena，也没有清除已有数据。")
                             }
-                            title = ""
-                            content = ""
-                            onNotice("已保存在本机，未向 Arena 发送。")
                         }
                     }
                 ) { Text("保存在本机") }

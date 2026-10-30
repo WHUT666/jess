@@ -22,9 +22,12 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreVert
@@ -59,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.unit.dp
 import com.example.engine.AgentPagePolicy
 import kotlinx.coroutines.launch
 
@@ -85,10 +89,13 @@ fun AgentHomeScreen() {
     var showMore by remember { mutableStateOf(false) }
     val keyboardVisible = WindowInsets.isImeVisible
     val notify: (String) -> Unit = { message -> scope.launch { snackbar.showSnackbar(message) } }
+    LaunchedEffect(keyboardVisible) {
+        if (keyboardVisible) showMore = false
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = { if (!keyboardVisible) SnackbarHost(snackbar) },
         topBar = {
             if (!keyboardVisible) TopAppBar(
                 title = { Text("Agent") },
@@ -165,14 +172,16 @@ fun AgentHomeScreen() {
         onDismissRequest = { showInfo = false },
         title = { Text("官方会话与可核验信息") },
         text = {
-            Text(
-                "点击登录会打开 Arena 官方 Agent 页面；首次 Google 或邮箱验证仍须本人完成。" +
-                    "Google 登录若不支持内嵌页面，请用系统浏览器，并继续在浏览器中对话；两者会话不共享。\n\n" +
-                    "本应用不保存或自动填写密码，不以 Cookie、HTTP 403 或网络故障判断账号封禁。" +
-                    "如 Arena 明确提示账号被禁用，请以官网提示／客服确认为准。\n\n" +
-                    AgentPagePolicy.AGENT_MODEL_STATUS +
-                    "。旧版对战档案仅供本机查看，不能冒充新 Agent 会话。"
-            )
+            Box(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                Text(
+                    "点击登录会打开 Arena 官方 Agent 页面；首次 Google 或邮箱验证仍须本人完成。" +
+                        "Google 登录若不支持内嵌页面，请用系统浏览器，并继续在浏览器中对话；两者会话不共享。\n\n" +
+                        "本应用不保存或自动填写密码，不以 Cookie、HTTP 403 或网络故障判断账号封禁。" +
+                        "如 Arena 明确提示账号被禁用，请以官网提示／客服确认为准。\n\n" +
+                        AgentPagePolicy.AGENT_MODEL_STATUS +
+                        "。旧版对战档案仅供本机查看，不能冒充新 Agent 会话。"
+                )
+            }
         },
         confirmButton = { TextButton(onClick = { showInfo = false }) { Text("明白") } }
     )
