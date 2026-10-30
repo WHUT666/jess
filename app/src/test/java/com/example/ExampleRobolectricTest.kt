@@ -2,11 +2,18 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.example.data.model.ModelIdentityInfo
-import com.example.data.model.SequencingMode
-import com.example.engine.ArenaJsBridge
+import com.example.data.db.AppDatabase
+import com.example.data.model.AccountStatus
+import com.example.engine.AgentPagePolicy
+import com.example.engine.ArenaAuthEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -15,72 +22,39 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ExampleRobolectricTest {
-
-    @Test
-    fun `read app_name string from context`() {
+    @Test fun `app label remains ArenaPilot`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val appName = context.getString(R.string.app_name)
-        assertEquals("ArenaPilot", appName)
+        assertEquals("ArenaPilot", context.getString(R.string.app_name))
     }
 
-    @Test
-    fun `verify sequencing modes are defined`() {
-        assertEquals(4, SequencingMode.values().size)
-        assertNotNull(SequencingMode.SEQUENTIAL.displayName)
+    @Test fun `no sample accounts or fake battles are generated`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = AppDatabase.getDatabase(context, CoroutineScope(SupervisorJob() + Dispatchers.IO))
+        assertEquals(0, db.accountDao().count())
+        assertEquals(0, db.conversationDao().countSessions())
     }
 
-    @Test
-    fun `verify bridge instantiates properly`() {
-        val bridge = ArenaJsBridge()
-        assertNotNull(bridge.events)
+    @Test fun `legacy direct-login probe cannot send credentials or claim unbanned`() = runBlocking {
+        val result = ArenaAuthEngine.probeArenaLoginEndpoints("example@example.invalid", "not-a-real-password")
+        assertEquals(AccountStatus.UNCHECKED, result.status)
+        assertFalse(result.success)
+        assertFalse(result.isBannedOnArena)
+        assertEquals("", result.capturedCookies)
     }
 
-    @Test
-    fun `verify model provider resolution`() {
-        assertEquals("OpenAI", ModelIdentityInfo.resolveProvider("gpt-4o-2024-08-06"))
-        assertEquals("Anthropic", ModelIdentityInfo.resolveProvider("claude-3-5-sonnet"))
-        assertEquals("Google", ModelIdentityInfo.resolveProvider("gemini-1.5-pro"))
-        assertEquals("DeepSeek", ModelIdentityInfo.resolveProvider("deepseek-v2.5"))
-        assertEquals("Meta", ModelIdentityInfo.resolveProvider("llama-3.1-70b-instruct"))
-        assertEquals("Alibaba Qwen", ModelIdentityInfo.resolveProvider("qwen-2.5-72b"))
+    @Test fun `Agent route is the only resumable route and callbacks are sanitized`() {
+        assertEquals("https://arena.ai/agent/123", AgentPagePolicy.resumableUrl("https://arena.ai/agent/123?code=do-not-store#x"))
+        assertNull(AgentPagePolicy.resumableUrl("http://arena.ai/agent"))
+        assertNull(AgentPagePolicy.resumableUrl("https://arena.ai.evil.example/agent"))
+        assertNull(AgentPagePolicy.resumableUrl("https://arena.ai/battle"))
+        assertNull(AgentPagePolicy.resumableUrl("https://user@arena.ai/agent"))
+        assertTrue(AgentPagePolicy.isOfficialHost("accounts.arena.ai"))
+        assertFalse(AgentPagePolicy.isOfficialHost("arena.ai.evil.example"))
     }
 
-    @Test
-    fun `verify high tier model classification and low tier identification`() {
-        // High tier models
-        assertEquals(com.example.data.model.ModelTier.TIER_S_FLAGSHIP, com.example.engine.ArenaModelProbeEngine.classifyTier("gpt-4o-2024-08-06"))
-        assertEquals(com.example.data.model.ModelTier.TIER_S_FLAGSHIP, com.example.engine.ArenaModelProbeEngine.classifyTier("o1-preview"))
-        assertEquals(com.example.data.model.ModelTier.TIER_S_FLAGSHIP, com.example.engine.ArenaModelProbeEngine.classifyTier("claude-3-5-sonnet-20241022"))
-        assertEquals(com.example.data.model.ModelTier.TIER_S_FLAGSHIP, com.example.engine.ArenaModelProbeEngine.classifyTier("deepseek-r1"))
-        assertEquals(com.example.data.model.ModelTier.TIER_S_FLAGSHIP, com.example.engine.ArenaModelProbeEngine.classifyTier("gemini-1.5-pro"))
-
-        // Low tier models (auto-discard targets)
-        assertEquals(com.example.data.model.ModelTier.TIER_C_LOW, com.example.engine.ArenaModelProbeEngine.classifyTier("llama-3-8b-instruct"))
-        assertEquals(com.example.data.model.ModelTier.TIER_C_LOW, com.example.engine.ArenaModelProbeEngine.classifyTier("qwen-2.5-7b"))
-        assertEquals(com.example.data.model.ModelTier.TIER_C_LOW, com.example.engine.ArenaModelProbeEngine.classifyTier("mistral-7b"))
-
-        // Reasoning snippet detection for anonymous model
-        val thinkSnippet = "<think>\nThinking about the problem deeply...\n</think>\nHere is the answer."
-        assertEquals(com.example.data.model.ModelTier.TIER_S_FLAGSHIP, com.example.engine.ArenaModelProbeEngine.classifyTier("Model A (盲测中)", thinkSnippet))
-    }
-
-    @Test
-    fun `verify randomized canary fingerprint probe generation`() {
-        val base = "请对比分布式共识算法"
-        val (prompt, fp) = com.example.engine.ArenaModelProbeEngine.generateFingerprintedProbe(base, useRandomFingerprint = true)
-        org.junit.Assert.assertTrue(prompt.contains(base))
-        org.junit.Assert.assertTrue(prompt.contains("[PROBE-CANARY-FP: #$fp"))
-        org.junit.Assert.assertEquals(8, fp.length)
-    }
-
-    @Test
-    fun `verify account entity status defaults`() {
-        val account = com.example.data.model.ManagedAccountEntity(
-            email = "DaynaMorissettehnysz@outlook.com",
-            password = "Ww@123456",
-            label = "Outlook 1"
-        )
-        assertEquals("UNCHECKED", account.status)
-        assertEquals(0L, account.lastCheckedAt)
+    @Test fun `403 is not interpreted as evidence of a ban`() {
+        assertTrue(AgentPagePolicy.accessMessage(403).contains("不能据此判定封禁"))
+        assertTrue(AgentPagePolicy.accessMessage(429).contains("频率限制"))
+        assertTrue(AgentPagePolicy.AGENT_MODEL_STATUS.contains("未公开"))
     }
 }
